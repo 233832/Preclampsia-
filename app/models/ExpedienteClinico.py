@@ -10,7 +10,7 @@ class ExpedienteClinico(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
 
-    # 🔑 Relación con paciente (1 a 1)
+    # Relación con paciente (1 a 1)
     paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="CASCADE"), nullable=False, unique=True)
 
     # Relaciones

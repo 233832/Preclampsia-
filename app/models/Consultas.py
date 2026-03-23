@@ -8,10 +8,10 @@ class Consulta(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
-    # 🔑 Relación con paciente
+    # Relación con paciente
     paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="CASCADE"), nullable=False)
 
-    # 🔑 Relación con expediente clínico
+    # Relación con expediente clínico
     expediente_id = Column(Integer, ForeignKey("expedientes_clinicos.id", ondelete="CASCADE"), nullable=False)
 
     # Datos de la consulta

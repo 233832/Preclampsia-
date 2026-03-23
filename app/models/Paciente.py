@@ -16,7 +16,7 @@ class Paciente(Base):
     ciudad = Column(String(100), nullable=False)
     telefono = Column(String(20), nullable=False)
 
-    # 🧬 Antecedentes médicos (ahora aquí)
+    # Antecedentes médicos (ahora aquí)
     hipertension_previa = Column(Boolean, default=False)
     diabetes = Column(Boolean, default=False)
     antecedentes_familia_hipertension = Column(Boolean, default=False)
