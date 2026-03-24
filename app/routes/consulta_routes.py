@@ -5,7 +5,7 @@ from app.models.Consultas import Consulta
 from app.models.Paciente import Paciente
 from app.models.ExpedienteClinico import ExpedienteClinico
 from app.schemas.consulta_schema import ConsultaCreate, ConsultaResponse
-from app.services.gemini_service import generar_prediccion_gemini
+from app.services.gemini_service import generar_prediccion_gemini, clasificar_riesgo
 
 consulta_router = APIRouter()
 
@@ -31,7 +31,27 @@ def read_consulta(consulta_id: int, db: Session = Depends(get_db)):
     consulta = db.query(Consulta).filter(Consulta.id == consulta_id).first()
     if not consulta:
         raise HTTPException(status_code=404, detail="Consulta not found")
-    return consulta
+
+    paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
+    if paciente:
+        htn = 1 if paciente.hipertension_previa else 0
+        diabetes = 1 if paciente.diabetes else 0
+        fam_htn = 1 if paciente.antecedentes_familia_hipertension else 0
+        riesgo = clasificar_riesgo(
+            consulta.edad_madre,
+            consulta.imc,
+            htn,
+            diabetes,
+            fam_htn,
+            consulta.presion_sistolica,
+            consulta.presion_diastolica,
+        )
+    else:
+        riesgo = None
+
+    data = ConsultaResponse.model_validate(consulta).model_dump()
+    data["riesgo"] = riesgo
+    return data
 
 @consulta_router.put("/consultas/{consulta_id}", response_model=ConsultaResponse)
 def update_consulta(consulta_id: int, consulta_data: ConsultaCreate, db: Session = Depends(get_db)):

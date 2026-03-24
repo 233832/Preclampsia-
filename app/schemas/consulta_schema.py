@@ -19,3 +19,4 @@ class ConsultaCreate(ConsultaBase):
 
 class ConsultaResponse(ConsultaBase):
     id: int
+    riesgo: str | None = None

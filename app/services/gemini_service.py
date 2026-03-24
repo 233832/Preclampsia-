@@ -107,10 +107,9 @@ Resultados del sistema:
 - Probabilidad estimada por ML: {round(probabilidad*100,2)}%
 
 Explica:
-1. Diferencia entre ambos resultados
-2. Interpretación clínica
-3. Nivel de riesgo real
-4. Recomendaciones médicas
+1. Interpretación clínica
+2. Recomendaciones médicas
+3. Posibles complicaciones
 """
 
     try:
