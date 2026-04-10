@@ -24,3 +24,4 @@ class Paciente(Base):
     # Relaciones
     consultas = relationship("Consulta", back_populates="paciente", cascade="all, delete-orphan")
     expediente = relationship("ExpedienteClinico", back_populates="paciente", uselist=False, cascade="all, delete-orphan")
+    notificaciones = relationship("Notificacion", back_populates="paciente")

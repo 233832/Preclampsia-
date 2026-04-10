@@ -1,5 +1,12 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+from enum import Enum
+
+class RiesgoEnum(str, Enum):
+    NINGUNO = "Ninguno"
+    BAJO = "Bajo"
+    MEDIO = "Medio"
+    ALTO = "Alto"
 
 class ConsultaBase(BaseModel):
     paciente_id: int
@@ -19,3 +26,4 @@ class ConsultaCreate(ConsultaBase):
 
 class ConsultaResponse(ConsultaBase):
     id: int
+    riesgo: RiesgoEnum

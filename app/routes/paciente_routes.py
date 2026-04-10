@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from app.shared.config.database import get_db
 from app.models.Paciente import Paciente
 from app.schemas.paciente_schema import PacienteCreate, PacienteResponse
+from app.services.notificacion_service import crear_notificacion
+from app.models.Notificaciones import TipoNotificacionEnum
 
 paciente_router = APIRouter()
 
@@ -12,6 +14,13 @@ def create_paciente(paciente: PacienteCreate, db: Session = Depends(get_db)):
     db.add(new_paciente)
     db.commit()
     db.refresh(new_paciente)
+    
+    crear_notificacion(db,
+    new_paciente.id,
+    TipoNotificacionEnum.INFORMATIVA,
+    "Nuevo paciente registrado"
+    )
+
     return new_paciente
 
 @paciente_router.get("/pacientes/", response_model=list[PacienteResponse])

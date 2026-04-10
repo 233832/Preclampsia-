@@ -6,6 +6,8 @@ from app.models.Paciente import Paciente
 from app.models.ExpedienteClinico import ExpedienteClinico
 from app.schemas.consulta_schema import ConsultaCreate, ConsultaResponse
 from app.services.gemini_service import generar_prediccion_gemini, clasificar_riesgo
+from app.services.notificacion_service import crear_notificacion
+from app.models.Notificaciones import TipoNotificacionEnum
 
 consulta_router = APIRouter()
 
@@ -46,6 +48,16 @@ def create_consulta(consulta: ConsultaCreate, db: Session = Depends(get_db)):
     db.add(new_consulta)
     db.commit()
     db.refresh(new_consulta)
+    
+    # NOTIFICACIÓN AUTOMÁTICA
+    crear_notificacion(
+    db,
+    consulta.paciente_id,
+    TipoNotificacionEnum.INFORMATIVA,
+    "Consulta registrada correctamente",
+    consulta_id=new_consulta.id
+    )
+
     return new_consulta
 
 @consulta_router.get("/consultas/", response_model=list[ConsultaResponse])
