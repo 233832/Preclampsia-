@@ -1,6 +1,13 @@
 from app.shared.config.database import Base
-from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
+import enum
+
+class RiesgoEnum(enum.Enum):
+    NINGUNO = "Ninguno"
+    BAJO = "Bajo"
+    MEDIO = "Medio"
+    ALTO = "Alto"
 
 
 class Consulta(Base):
@@ -30,6 +37,10 @@ class Consulta(Base):
     presion_sistolica = Column(Integer, nullable=False)
     presion_diastolica = Column(Integer, nullable=False)
 
+    # Riesgo de preeclampsia (calculado automáticamente)
+    riesgo = Column(Enum(RiesgoEnum), nullable=False, default=RiesgoEnum.NINGUNO)
+
     # Relaciones
     paciente = relationship("Paciente", back_populates="consultas")
     expediente = relationship("ExpedienteClinico", back_populates="consultas")
+    notificaciones = relationship("Notificacion", back_populates="consulta")

@@ -7,3 +7,6 @@ passlib[bcrypt]
 pymysql
 python-jose[cryptography]
 cryptography
+pandas
+scikit-learn
+openpyxl

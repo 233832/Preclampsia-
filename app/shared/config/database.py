@@ -20,10 +20,9 @@ try:
     with engine.connect() as connection:
         pass
 except Exception as e:
-    print(f"Error al conectar a la base de datos RDS, conectando a localhost para desarrollo: {e}")
-    DB_URL = os.getenv("DB_URL")
-    SQLALCHEMY_DATABASE_URL = DB_URL 
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    print(f"Error al conectar a la base de datos RDS, conectando a SQLite para desarrollo: {e}")
+    SQLALCHEMY_DATABASE_URL = "sqlite:///./preclampsia_dev.db"
+    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base() 
