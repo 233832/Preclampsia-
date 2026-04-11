@@ -35,10 +35,8 @@ def calcular_pesos(edad, imc, htn, diabetes, fam_htn, sysbp, diabp):
 # ================== CLASIFICACIÓN ==================
 def clasificar_riesgo(edad, imc, htn, diabetes, fam_htn, sysbp, diabp):
 
-    if htn == 1 or diabetes == 1:
-        return "ALTO"
-
     pesos = calcular_pesos(edad, imc, htn, diabetes, fam_htn, sysbp, diabp)
+    score_total = sum(pesos.values())
 
     score_mod = (
         pesos["age"] +
@@ -47,6 +45,14 @@ def clasificar_riesgo(edad, imc, htn, diabetes, fam_htn, sysbp, diabp):
         pesos["diabp"] +
         pesos["fam"]
     )
+
+    # 🟢 NUEVA CONDICIÓN: NINGÚN FACTOR
+    if score_total == 0:
+        return "NINGUNO"
+
+    # Condición clínica fuerte
+    if htn == 1 or diabetes == 1:
+        return "ALTO"
 
     if score_mod > 11.09:
         return "ALTO"
@@ -86,7 +92,7 @@ try:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        # MODELO MEJORADO
+        # MODELO
         modelo = RandomForestClassifier(
             n_estimators=500,
             max_depth=12,
@@ -107,7 +113,7 @@ except Exception as e:
 # ================== FUNCIÓN PRINCIPAL ==================
 def generar_prediccion_gemini(edad, imc, htn, diabetes, fam_htn, sysbp, diabp):
 
-    # CONVERSIÓN CLAVE
+    # CONVERSIÓN
     htn = int(htn)
     diabetes = int(diabetes)
     fam_htn = int(fam_htn)
@@ -115,32 +121,39 @@ def generar_prediccion_gemini(edad, imc, htn, diabetes, fam_htn, sysbp, diabp):
     # Reglas clínicas
     riesgo_reglas = clasificar_riesgo(edad, imc, htn, diabetes, fam_htn, sysbp, diabp)
 
-    # Score
+    # Score total
     score_total = calcular_score_total(edad, imc, htn, diabetes, fam_htn, sysbp, diabp)
 
-    # ML
+    # ================== ML ==================
     riesgo_ml = "NO DISPONIBLE"
     probabilidad = 0.0
 
-    if modelo is not None and scaler is not None:
-        try:
-            datos = [[edad, imc, htn, diabetes, fam_htn, sysbp, diabp]]
+    # 🟢 NUEVA LÓGICA GLOBAL
+    if score_total == 0:
+        riesgo_reglas = "NINGUNO"
+        riesgo_ml = "NINGUNO"
+        probabilidad = 1.0
 
-            # ESCALAR TAMBIÉN EN PREDICCIÓN
-            datos_scaled = scaler.transform(datos)
+    else:
+        if modelo is not None and scaler is not None:
+            try:
+                datos = [[edad, imc, htn, diabetes, fam_htn, sysbp, diabp]]
 
-            pred_ml = modelo.predict(datos_scaled)[0]
+                # ESCALAR
+                datos_scaled = scaler.transform(datos)
 
-            riesgos = ["BAJO", "MEDIO", "ALTO"]
-            riesgo_ml = riesgos[pred_ml]
+                pred_ml = modelo.predict(datos_scaled)[0]
 
-            proba = modelo.predict_proba(datos_scaled)[0]
-            probabilidad = max(proba)
+                riesgos = ["BAJO", "MEDIO", "ALTO"]
+                riesgo_ml = riesgos[pred_ml]
 
-        except Exception as e:
-            riesgo_ml = f"ERROR ML: {e}"
+                proba = modelo.predict_proba(datos_scaled)[0]
+                probabilidad = max(proba)
 
-    # PROMPT 
+            except Exception as e:
+                riesgo_ml = f"ERROR ML: {e}"
+
+    # ================== PROMPT ==================
     prompt = f"""
 Eres un asistente médico especializado en preeclampsia.
 
@@ -148,6 +161,7 @@ REGLAS OBLIGATORIAS:
 - No generar contradicciones clínicas.
 - Si presión diastólica >= 90, considerar hipertensión actual.
 - Si la confianza del ML < 60%, priorizar reglas clínicas.
+- Si el score total es 0, clasificar obligatoriamente como "NINGUNO".
 
 Paciente:
 - Edad: {edad}

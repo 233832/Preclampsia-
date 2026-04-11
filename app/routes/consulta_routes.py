@@ -139,16 +139,18 @@ def prediccion_consulta(consulta_id: int, db: Session = Depends(get_db)):
             },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print("🔥 ERROR EN ENDPOINT:", e)
+        print("ERROR EN ENDPOINT /consultas/{consulta_id}/prediccion:", e)
 
         return {
             "consulta_id": consulta_id,
             "paciente_id": None,
-            "riesgo": "BAJO",
-            "riesgo_ml": "BAJO",
+            "riesgo": "NINGUNO",
+            "riesgo_ml": "NINGUNO",
             "score_total": 0,
             "confianza_ml": 0,
-            "interpretacion": "Error en backend",
+            "interpretacion": f"Error en backend: {e}",
             "datos_consulta": {}
         }
