@@ -219,10 +219,22 @@ def prediccion_consulta(consulta_id: int, db: Session = Depends(get_db)):
         if not paciente:
             raise HTTPException(status_code=404, detail="Paciente not found")
 
+        # 1. EVITAR VOLVER A USAR IA (CLAVE)
+        if consulta.interpretacion and consulta.score_total:
+            return {
+                "consulta_id": consulta.id,
+                "paciente_id": consulta.paciente_id,
+                "riesgo": consulta.riesgo.name,
+                "score_total": consulta.score_total,
+                "interpretacion": consulta.interpretacion
+            }
+
+        # 2. Preparar datos
         htn = 1 if paciente.hipertension_previa else 0
         diabetes = 1 if paciente.diabetes else 0
         fam_htn = 1 if paciente.antecedentes_familia_hipertension else 0
 
+        # 3. Generar predicción (IA SOLO UNA VEZ)
         prediccion = generar_prediccion_gemini(
             edad=consulta.edad_madre,
             imc=consulta.imc,
@@ -236,6 +248,13 @@ def prediccion_consulta(consulta_id: int, db: Session = Depends(get_db)):
         if not prediccion:
             raise Exception("Predicción vacía")
 
+        # 4. GUARDAR RESULTADO (CLAVE)
+        consulta.interpretacion = prediccion["interpretacion"]
+        consulta.score_total = prediccion["score_total"]
+
+        db.commit()
+
+        # 5. Retornar
         return {
             "consulta_id": consulta.id,
             "paciente_id": consulta.paciente_id,
@@ -258,24 +277,21 @@ def prediccion_consulta(consulta_id: int, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        print("ERROR EN ENDPOINT /consultas/{consulta_id}/prediccion:", e)
+        print("ERROR EN PREDICCION:", e)
 
         return {
             "consulta_id": consulta_id,
             "paciente_id": None,
             "riesgo": "NINGUNO",
-            "riesgo_ml": "NINGUNO",
             "score_total": 0,
-            "confianza_ml": 0,
             "interpretacion": f"Error en backend: {e}",
             "datos_consulta": {}
         }
 
-
 @consulta_router.get("/consultas/{consulta_id}/pdf")
 def generar_pdf_consulta(consulta_id: int, db: Session = Depends(get_db)):
     try:
-        # 🔹 1. Obtener consulta
+        #  1. Obtener consulta
         consulta = db.query(Consulta).filter(Consulta.id == consulta_id).first()
         if not consulta:
             raise HTTPException(status_code=404, detail="Consulta not found")
@@ -283,17 +299,24 @@ def generar_pdf_consulta(consulta_id: int, db: Session = Depends(get_db)):
         paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
         if not paciente:
             raise HTTPException(status_code=404, detail="Paciente not found")
+        
+        # 🔥 GENERAR IA SOLO SI NO EXISTE
+        if not consulta.interpretacion or not consulta.score_total:
+            prediccion_consulta(consulta_id, db)
+        # refrescar datos desde BD
+        db.refresh(consulta)
 
-        # 🔹 2. Obtener predicción (REUTILIZAMOS TU ENDPOINT)
+        #  2. Obtener predicción (REUTILIZAMOS TU ENDPOINT)
         prediccion = prediccion_consulta(consulta_id, db)
-
-        riesgo = prediccion.get("riesgo", "NINGUNO")
-        score = prediccion.get("score_total", 0)
-        interpretacion = prediccion.get("interpretacion", "Sin interpretación disponible")
+        #  USAR DATOS GUARDADOS (NO IA)
+        riesgo = consulta.riesgo.name if consulta.riesgo else "NINGUNO"
+        score = consulta.score_total if consulta.score_total else 0 
+        interpretacion = consulta.interpretacion or "Sin interpretación disponible"
+        
         fecha = getattr(consulta, "fecha_hora_consulta", None)
         fecha_texto = fecha.strftime("%Y-%m-%d %H:%M") if fecha else "N/A"
 
-        # 🔹 3. Convertir logo
+        #  3. Convertir logo
         logo_path = os.path.join("app", "assets", "Gemini_Generated_Image_.png")
         logo = ""
         if os.path.exists(logo_path):

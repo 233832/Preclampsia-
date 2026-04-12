@@ -7,6 +7,7 @@ from app.routes.consulta_routes import consulta_router
 from app.routes.notificaciones_routes import router as notificaciones_router
 from app.routes.configuraciones_routes import router as configuraciones_router
 from app.routes import actualizaciones_routes
+from app.routes import notas_routes
 
 
 
@@ -31,6 +32,7 @@ app.include_router(consulta_router, prefix="/api", tags=["consultas"])
 app.include_router(notificaciones_router, prefix="/api", tags=["notificaciones"])
 app.include_router(configuraciones_router, prefix="/api", tags=["configuraciones"])
 app.include_router(actualizaciones_routes.router, prefix="/api", tags=["actualizaciones"])
+app.include_router(notas_routes.router, prefix="/api", tags=["notas"])
 
 app.add_middleware(
     CORSMiddleware,
