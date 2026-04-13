@@ -31,6 +31,31 @@ def get_notificaciones(db: Session = Depends(get_db)):
         for n in notificaciones
     ]
 
+# NUEVO: SOLO NO LEÍDAS (CAMPANA / ALERTAS)
+@router.get("/no-leidas", response_model=list)
+def get_no_leidas(db: Session = Depends(get_db)):
+
+    notificaciones = (
+        db.query(Notificacion)
+        .options(joinedload(Notificacion.paciente))
+        .filter(Notificacion.leida == False)
+        .order_by(Notificacion.fecha.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": n.id,
+            "paciente_id": n.paciente_id,
+            "paciente_nombre": n.paciente.nombre if n.paciente else "Sin nombre",
+            "tipo": n.tipo.value if n.tipo else None,
+            "mensaje": n.mensaje,
+            "consulta_id": n.consulta_id,
+            "fecha": n.fecha,
+            "leida": n.leida
+        }
+        for n in notificaciones
+    ]
 
 @router.put("/{id}/leida")
 def marcar_como_leida(id: int, db: Session = Depends(get_db)):

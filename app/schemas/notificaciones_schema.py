@@ -12,7 +12,7 @@ class NotificacionBase(BaseModel):
 
 class NotificacionResponse(NotificacionBase):
     id: int
-    paciente_nombre: str  # 🔥 NUEVO
+    paciente_nombre: str
     fecha: datetime
     leida: bool
 

@@ -6,7 +6,27 @@ from app.schemas.configuraciones_schema import ConfiguracionBase, ConfiguracionR
 
 router = APIRouter(prefix="/configuraciones")
 
+def serialize_configuracion(config: Configuracion) -> dict:
+    return {
+        "id": config.id,
+        "umbral_sistolico": config.umbral_sistolico,
+        "umbral_diastolico": config.umbral_diastolico,
+        "notificaciones_activas": bool(
+            config.criticas or config.advertencias or config.informativas
+        ),
+        "criticas": config.criticas,
+        "advertencias": config.advertencias,
+        "informativas": config.informativas,
+        "frecuencia_bajo": config.frecuencia_bajo,
+        "frecuencia_medio": config.frecuencia_medio,
+        "frecuencia_alto": config.frecuencia_alto,
+        "nombre_sistema": config.nombre_sistema,
+        "version": config.version,
+        "descripcion": config.descripcion,
+    }
 
+
+# 🔌 Conexión a DB
 def get_db():
     db = SessionLocal()
     try:
@@ -15,19 +35,22 @@ def get_db():
         db.close()
 
 
+# 🟢 GET → obtener configuración
 @router.get("/", response_model=ConfiguracionResponse)
 def get_configuracion(db: Session = Depends(get_db)):
     config = db.query(Configuracion).first()
 
+    # Si no existe, crear una por defecto
     if not config:
         config = Configuracion()
         db.add(config)
         db.commit()
         db.refresh(config)
 
-    return config
+    return serialize_configuracion(config)
 
 
+# 🔵 PUT → actualizar configuración
 @router.put("/", response_model=ConfiguracionResponse)
 def update_configuracion(data: ConfiguracionBase, db: Session = Depends(get_db)):
     config = db.query(Configuracion).first()
@@ -35,16 +58,32 @@ def update_configuracion(data: ConfiguracionBase, db: Session = Depends(get_db))
     if not config:
         config = Configuracion()
 
+    # 🟡 Umbrales
     config.umbral_sistolico = data.umbral_sistolico
     config.umbral_diastolico = data.umbral_diastolico
-    config.frecuencia_dias = data.frecuencia_dias
-    config.notificaciones_activas = data.notificaciones_activas
-    config.criticas = data.criticas
-    config.advertencias = data.advertencias
-    config.informativas = data.informativas
+
+    # 🔴 Notificaciones
+    if data.notificaciones_activas:
+        config.criticas = data.criticas
+        config.advertencias = data.advertencias
+        config.informativas = data.informativas
+    else:
+        config.criticas = False
+        config.advertencias = False
+        config.informativas = False
+
+    # 🟡 Seguimiento (NUEVO)
+    config.frecuencia_bajo = data.frecuencia_bajo
+    config.frecuencia_medio = data.frecuencia_medio
+    config.frecuencia_alto = data.frecuencia_alto
+
+    # 🔵 Sistema (NUEVO)
+    config.nombre_sistema = data.nombre_sistema
+    config.version = data.version
+    config.descripcion = data.descripcion
 
     db.add(config)
     db.commit()
     db.refresh(config)
 
-    return config
+    return serialize_configuracion(config)
