@@ -11,7 +11,7 @@ from app.routes import actualizaciones_routes
 from app.routes import notas_routes
 from app.routes import reportes_routes
 from app.services import gemini_service
-
+from app.routes.auth_routes import router as auth_router
 
 app = FastAPI()
 
@@ -163,6 +163,7 @@ app.include_router(configuraciones_router, prefix="/api", tags=["configuraciones
 app.include_router(actualizaciones_routes.router, prefix="/api", tags=["actualizaciones"])
 app.include_router(notas_routes.router, prefix="/api", tags=["notas"])
 app.include_router(reportes_routes.router, prefix="/api", tags=["reportes"])
+app.include_router(auth_router, prefix="/api", tags=["auth"])
 
 app.add_middleware(
     CORSMiddleware,

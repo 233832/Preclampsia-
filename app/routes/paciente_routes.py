@@ -5,8 +5,9 @@ from app.models.Paciente import Paciente
 from app.schemas.paciente_schema import PacienteCreate, PacienteResponse
 from app.services.notificacion_service import crear_notificacion
 from app.models.Notificaciones import TipoNotificacionEnum
+from app.services.auth_service import get_current_user
 
-paciente_router = APIRouter(prefix="/pacientes")
+paciente_router = APIRouter(prefix="/pacientes", dependencies=[Depends(get_current_user)])
 
 @paciente_router.post("/", response_model=PacienteResponse, status_code=status.HTTP_201_CREATED)
 def create_paciente(paciente: PacienteCreate, db: Session = Depends(get_db)):

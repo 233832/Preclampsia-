@@ -16,8 +16,9 @@ from fastapi.responses import FileResponse
 import base64
 import os
 import unicodedata
+from app.services.auth_service import get_current_user
 
-consulta_router = APIRouter()
+consulta_router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def normalizar_riesgo_enum(valor_riesgo) -> RiesgoEnum:
@@ -236,11 +237,19 @@ def create_consulta(consulta: ConsultaCreate, db: Session = Depends(get_db)):
 
     return new_consulta
 
+from app.services.auth_service import get_current_user
+
 @consulta_router.get("/consultas/", response_model=list[ConsultaResponse])
-def read_consultas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_consultas(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),  # 🔐 seguridad
+):
     consultas = db.query(Consulta).offset(skip).limit(limit).all()
+    
     for consulta in consultas:
         consulta.riesgo = normalizar_riesgo_enum(consulta.riesgo)
+    
     return consultas
 
 @consulta_router.get("/consultas/{consulta_id}", response_model=ConsultaResponse)

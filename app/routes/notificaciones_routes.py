@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.shared.config.database import get_db
 from app.models.Notificaciones import Notificacion
 from app.schemas.notificaciones_schema import NotificacionResponse
+from app.services.auth_service import get_current_user
 
-router = APIRouter(prefix="/notificaciones")
+router = APIRouter(prefix="/notificaciones", dependencies=[Depends(get_current_user)] )
 
 
 @router.get("", response_model=list[NotificacionResponse])

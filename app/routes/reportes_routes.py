@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -8,8 +8,9 @@ from app.models.Consultas import Consulta
 from app.models.Paciente import Paciente
 from app.utils.generar_pdf import generar_html_reporte, generar_pdf
 from app.routes.consulta_routes import prediccion_consulta
+from app.services.auth_service import get_current_user
 
-router = APIRouter(prefix="/reportes", tags=["Reportes"])
+router = APIRouter(prefix="/reportes", dependencies=[Depends(get_current_user)])
 
 RUTA_REPORTES = "reportes"
 
