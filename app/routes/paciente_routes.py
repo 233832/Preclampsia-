@@ -5,51 +5,63 @@ from app.models.Paciente import Paciente
 from app.schemas.paciente_schema import PacienteCreate, PacienteResponse
 from app.services.notificacion_service import crear_notificacion
 from app.models.Notificaciones import TipoNotificacionEnum
+from app.services.auth_service import get_current_user
 
-paciente_router = APIRouter()
+paciente_router = APIRouter(prefix="/pacientes", dependencies=[Depends(get_current_user)])
 
-@paciente_router.post("/pacientes/", response_model=PacienteResponse, status_code=status.HTTP_201_CREATED)
+@paciente_router.post("/", response_model=PacienteResponse, status_code=status.HTTP_201_CREATED)
 def create_paciente(paciente: PacienteCreate, db: Session = Depends(get_db)):
-    new_paciente = Paciente(**paciente.dict())
+    data = paciente.model_dump()  
+    new_paciente = Paciente(**data)
     db.add(new_paciente)
     db.commit()
     db.refresh(new_paciente)
-    
-    crear_notificacion(db,
-    new_paciente.id,
-    TipoNotificacionEnum.INFORMATIVA,
-    "Nuevo paciente registrado"
+    crear_notificacion(
+        db,
+        new_paciente.id,
+        TipoNotificacionEnum.INFORMATIVA,
+        "Nuevo paciente registrado"
     )
-
     return new_paciente
 
-@paciente_router.get("/pacientes/", response_model=list[PacienteResponse])
+@paciente_router.get("/", response_model=list[PacienteResponse])
 def read_pacientes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(Paciente).offset(skip).limit(limit).all()
+    pacientes = db.query(Paciente).offset(skip).limit(limit).all()
+    return pacientes
 
-@paciente_router.get("/pacientes/{paciente_id}", response_model=PacienteResponse)
+@paciente_router.get("/{paciente_id}", response_model=PacienteResponse)
 def read_paciente(paciente_id: int, db: Session = Depends(get_db)):
     paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
     if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Paciente no encontrado"
+        )
     return paciente
 
-@paciente_router.put("/pacientes/{paciente_id}", response_model=PacienteResponse)
+@paciente_router.put("/{paciente_id}", response_model=PacienteResponse)
 def update_paciente(paciente_id: int, paciente_data: PacienteCreate, db: Session = Depends(get_db)):
     paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
     if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente not found")
-    for key, value in paciente_data.dict().items():
+        raise HTTPException(
+            status_code=404,
+            detail="Paciente no encontrado"
+        )
+    update_data = paciente_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(paciente, key, value)
     db.commit()
     db.refresh(paciente)
     return paciente
 
-@paciente_router.delete("/pacientes/{paciente_id}", status_code=status.HTTP_204_NO_CONTENT)
+@paciente_router.delete("/{paciente_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_paciente(paciente_id: int, db: Session = Depends(get_db)):
     paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
     if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Paciente no encontrado"
+        )
     db.delete(paciente)
     db.commit()
     return

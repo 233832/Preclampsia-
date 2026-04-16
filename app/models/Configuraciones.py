@@ -18,7 +18,8 @@ class Configuracion(Base):
     informativas = Column(Boolean, default=True)
 
     # 🟡 🔥 NUEVO → Seguimiento
-    frecuencia_bajo = Column(Integer, default=30)   # días
+    # Se mantiene el nombre físico de columna para compatibilidad con BD existente.
+    frecuencia_ninguno = Column("frecuencia_bajo", Integer, default=30)   # días
     frecuencia_medio = Column(Integer, default=14)
     frecuencia_alto = Column(Integer, default=7)
 

@@ -15,11 +15,28 @@ class Paciente(Base):
     estado_civil = Column(String(50), nullable=False)
     ciudad = Column(String(100), nullable=False)
     telefono = Column(String(20), nullable=False)
+    tipo_sangre = Column(String(5), nullable=True)
 
-    # Antecedentes médicos (ahora aquí)
+    # Antecedentes médicos 
     hipertension_previa = Column(Boolean, default=False)
     diabetes = Column(Boolean, default=False)
     antecedentes_familia_hipertension = Column(Boolean, default=False)
+    
+# Antecedentes obstétricos
+    embarazos_previos = Column(Integer, default=0)
+    partos_previos = Column(Integer, default=0)
+    abortos_previos = Column(Integer, default=0)
+    cesarea_previos = Column(Integer, default=0)
+    
+# Antecedentes personales patológicos
+    enf_renal_cronica = Column(Boolean, default=False)
+    hipertencion_cronica = Column(Boolean, default=False)
+    embarazo_multiple = Column("embarazos_multiples", Boolean, default=False)
+    muerte_fetal = Column(Boolean, default=False)
+    restriccion_fetal = Column(Boolean, default=False)
+    
+#Antecedentes heredo familiares
+    fam_cardiopatia = Column(Boolean, default=False)
 
     # Relaciones
     consultas = relationship("Consulta", back_populates="paciente", cascade="all, delete-orphan")

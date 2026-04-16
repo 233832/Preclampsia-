@@ -136,12 +136,14 @@ def _generar_pdf_xhtml2pdf_fallback(html_content: str, ruta_pdf: str) -> bool:
 
 def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> str:
 
+    riesgo_label = str(riesgo).upper()
+
     color_riesgo = {
         "NINGUNO": "#95A5A6",
-        "BAJO": "#00B894",
         "MEDIO": "#FDCB6E",
         "ALTO": "#D63031",
-    }.get(str(riesgo).upper(), "#999")
+        "HOSPITALIZACION": "#2980B9",
+    }.get(riesgo_label, "#999")
 
     logo_data_url = _obtener_logo_data_url()
     fecha_consulta = _formatear_fecha(getattr(consulta, "fecha_hora_consulta", None))

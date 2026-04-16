@@ -4,9 +4,9 @@ from enum import Enum
 
 class RiesgoEnum(str, Enum):
     NINGUNO = "Ninguno"
-    BAJO = "Bajo"
     MEDIO = "Medio"
     ALTO = "Alto"
+    HOSPITALIZACION = "Hospitalizacion"
 
 class ConsultaBase(BaseModel):
     paciente_id: int
@@ -19,6 +19,7 @@ class ConsultaBase(BaseModel):
     imc: float
     presion_sistolica: int
     presion_diastolica: int
+    pam: float
     model_config = ConfigDict(from_attributes=True)
 
 class ConsultaCreate(ConsultaBase):

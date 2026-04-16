@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 class ConfiguracionBase(BaseModel):
     umbral_sistolico: int
@@ -9,7 +9,10 @@ class ConfiguracionBase(BaseModel):
     advertencias: bool
     informativas: bool
 
-    frecuencia_bajo: int
+    frecuencia_ninguno: int = Field(
+        validation_alias=AliasChoices("frecuencia_ninguno", "frecuencia_bajo"),
+        serialization_alias="frecuencia_ninguno",
+    )
     frecuencia_medio: int
     frecuencia_alto: int
 
@@ -17,9 +20,8 @@ class ConfiguracionBase(BaseModel):
     version: str
     descripcion: str
 
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
 
 class ConfiguracionResponse(ConfiguracionBase):
     id: int
-
-    class Config:
-        from_attributes = True

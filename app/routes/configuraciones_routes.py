@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from app.shared.config.database import SessionLocal
 from app.models.Configuraciones import Configuracion
 from app.schemas.configuraciones_schema import ConfiguracionBase, ConfiguracionResponse
+from app.services.auth_service import get_current_user
 
-router = APIRouter(prefix="/configuraciones")
+router = APIRouter(prefix="/configuraciones", dependencies=[Depends(get_current_user)])
 
 def serialize_configuracion(config: Configuracion) -> dict:
     return {
@@ -17,7 +18,7 @@ def serialize_configuracion(config: Configuracion) -> dict:
         "criticas": config.criticas,
         "advertencias": config.advertencias,
         "informativas": config.informativas,
-        "frecuencia_bajo": config.frecuencia_bajo,
+        "frecuencia_ninguno": config.frecuencia_ninguno,
         "frecuencia_medio": config.frecuencia_medio,
         "frecuencia_alto": config.frecuencia_alto,
         "nombre_sistema": config.nombre_sistema,
@@ -73,7 +74,7 @@ def update_configuracion(data: ConfiguracionBase, db: Session = Depends(get_db))
         config.informativas = False
 
     # 🟡 Seguimiento (NUEVO)
-    config.frecuencia_bajo = data.frecuencia_bajo
+    config.frecuencia_ninguno = data.frecuencia_ninguno
     config.frecuencia_medio = data.frecuencia_medio
     config.frecuencia_alto = data.frecuencia_alto
 
