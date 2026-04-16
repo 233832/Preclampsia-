@@ -5,9 +5,9 @@ import enum
 
 class RiesgoEnum(enum.Enum):
     NINGUNO = "Ninguno"
-    BAJO = "Bajo"
     MEDIO = "Medio"
     ALTO = "Alto"
+    HOSPITALIZACION = "Hospitalizacion"
 
 
 class Consulta(Base):
@@ -36,6 +36,7 @@ class Consulta(Base):
     # Presión arterial
     presion_sistolica = Column(Integer, nullable=False)
     presion_diastolica = Column(Integer, nullable=False)
+    pam = Column(Float, nullable=False)
 
     # Riesgo de preeclampsia (calculado automáticamente)
     riesgo = Column(Enum(RiesgoEnum), nullable=False, default=RiesgoEnum.NINGUNO)

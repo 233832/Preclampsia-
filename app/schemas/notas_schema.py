@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Base
 class NotaBase(BaseModel):
@@ -21,5 +21,4 @@ class NotaResponse(NotaBase):
     paciente_id: int
     fecha_creacion: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
