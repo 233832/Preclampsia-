@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 import os
 
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
-from fastapi.security import HTTPBearer
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 load_dotenv()
 
@@ -41,13 +41,55 @@ def verify_token(token: str):
     except JWTError:
         return None
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
-def get_current_user(credentials=Depends(security)):
-    token = credentials.credentials
+def _token_from_cookie(request: Request) -> str | None:
+    cookie_value = request.cookies.get("access_token")
+    if not cookie_value:
+        return None
+
+    cookie_value = cookie_value.strip()
+    if not cookie_value:
+        return None
+
+    if cookie_value.lower().startswith("bearer "):
+        return cookie_value.split(" ", 1)[1].strip() or None
+
+    return cookie_value
+
+
+def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+):
+    token: str | None = None
+
+    if credentials is not None:
+        if credentials.scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=401,
+                detail="Esquema invalido. Usa Authorization: Bearer <token>",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        token = credentials.credentials
+    else:
+        token = _token_from_cookie(request)
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Falta autenticacion. Envia Authorization: Bearer <token>",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = verify_token(token)
 
     if payload is None:
-        raise HTTPException(status_code=401, detail="Token inválido")
+        raise HTTPException(
+            status_code=401,
+            detail="Token invalido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return payload

@@ -21,6 +21,24 @@ if GEMINI_API_KEY and genai is not None:
 GEMINI_DISPONIBLE = client is not None
 
 
+# ================== UMBRALES CLINICOS ==================
+SCORE_TOTAL_MAX = 33.19
+SCORE_MEDIO_MAX = 13.7
+
+PRESION_SISTOLICA_MEDIO = 140
+PRESION_DIASTOLICA_MEDIO_1 = 90
+PRESION_ARTERIAL_MEDIA_MEDIO = 95
+PRESION_SISTOLICA_HOSP = 160
+PRESION_DIASTOLICA_HOSP = 110
+
+FACTORES_ALTO_AUTO = (
+    "diabetes",
+    "htn",
+    "enf_renal_cronica",
+    "embarazo_multiple",
+)
+
+
 # ================== FACTORES ==================
 def calcular_factores(datos):
 
@@ -31,7 +49,6 @@ def calcular_factores(datos):
     sysbp = datos["sysbp"]
     diabp = datos["diabp"]
     pam = datos["presion_art_media"]
-
     htn = datos["htn"]
     diabetes = datos["diabetes"]
     fam_htn = datos["fam_htn"]
@@ -61,11 +78,15 @@ def calcular_factores(datos):
     if htn == 1:
         factores.append(("htn", 3.6))
 
-    if sysbp >= 140:
+    if sysbp >= PRESION_SISTOLICA_MEDIO:
         factores.append(("ps", 2.4))
 
-    if diabp >= 90:
-        factores.append(("pd", 1.4))
+    if diabp >= PRESION_DIASTOLICA_MEDIO_1:
+        factores.append(("pd_1", 1.4))
+
+    # PAM medio es criterio clinico, sin peso adicional en score.
+    if pam > PRESION_ARTERIAL_MEDIA_MEDIO:
+        factores.append(("pam_medio", 0))
 
     if renal == 1:
         factores.append(("renal", 3.6))
@@ -74,7 +95,7 @@ def calcular_factores(datos):
         factores.append(("multiple", 2.9))
 
     # 🔴 CRISIS HIPERTENSIVA
-    if sysbp >= 160 or diabp >= 110:
+    if sysbp >= PRESION_SISTOLICA_HOSP or diabp >= PRESION_DIASTOLICA_HOSP:
         factores.append(("crisis_htn", 5.4))
 
     # 🔹 CUALITATIVOS (no suman)
@@ -87,31 +108,83 @@ def calcular_factores(datos):
     return factores
 
 
+def _hay_factor_alto_positivo(datos) -> bool:
+    for clave in FACTORES_ALTO_AUTO:
+        try:
+            if int(datos.get(clave, 0)) == 1:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _pam_en_rango_medio(pam: float) -> bool:
+    return pam > PRESION_ARTERIAL_MEDIA_MEDIO
+
+
 # ================== CLASIFICACIÓN ==================
 def clasificar_riesgo(datos):
 
-    sysbp = datos["sysbp"]
-    diabp = datos["diabp"]
-    pam = datos["presion_art_media"]
+    sysbp = float(datos["sysbp"])
+    diabp = float(datos["diabp"])
+    pam = float(datos["presion_art_media"])
 
-    # 🚨 CRITERIO ABSOLUTO
-    if sysbp >= 160 or diabp >= 110 or pam >= 110:
-        return "HOSPITALIZACION", 34.59
+    crisis_hipertensiva = (
+        sysbp >= PRESION_SISTOLICA_HOSP or diabp >= PRESION_DIASTOLICA_HOSP
+    )
 
     factores = calcular_factores(datos)
-    score = sum([peso for _, peso in factores])
+    score = round(sum(peso for _, peso in factores), 2)
 
-    # 🔹 ESCALA BASADA EN TU TOTAL
-    if score == 0:
-        return "NINGUNO", 0
+    # Hospitalizacion automatica por crisis hipertensiva.
+    if crisis_hipertensiva:
+        return "HOSPITALIZACION", SCORE_TOTAL_MAX
 
-    if score < 13.7:
-        return "MEDIO", round(score, 2)
+    # Hospitalizacion por score maximo acumulado.
+    if score >= SCORE_TOTAL_MAX:
+        return "HOSPITALIZACION", SCORE_TOTAL_MAX
 
-    if score < 29.19:
-        return "ALTO", round(score, 2)
+    # Alto automatico cuando una variable de la seccion ALTO es positiva.
+    if _hay_factor_alto_positivo(datos):
+        return "ALTO", score
 
-    return "HOSPITALIZACION", round(score, 2)
+    if score > SCORE_MEDIO_MAX:
+        return "ALTO", score
+
+    if 1 <= score <= SCORE_MEDIO_MAX:
+        return "MEDIO", score
+
+    if _pam_en_rango_medio(pam):
+        return "MEDIO", score
+
+    return "NINGUNO", 0
+
+
+def _fila_a_datos_prediccion(fila: dict) -> dict:
+    return {
+        "age": float(fila["age"]),
+        "bmi": float(fila["bmi"]),
+        "sysbp": float(fila["sysbp"]),
+        "diabp": float(fila["diabp"]),
+        "presion_art_media": float(fila["presion_art_media"]),
+        "htn": int(round(float(fila["htn"]))),
+        "diabetes": int(round(float(fila["diabetes"]))),
+        "fam_htn": int(round(float(fila["fam_htn"]))),
+        "fam_cardiopatia": int(round(float(fila["fam_cardiopatia"]))),
+        "enf_renal_cronica": int(round(float(fila["enf_renal_cronica"]))),
+        "embarazo_multiple": int(round(float(fila["embarazo_multiple"]))),
+        "muerte_fetal": int(round(float(fila["muerte_fetal"]))),
+        "restriccion_fetal": int(round(float(fila["restriccion_fetal"]))),
+    }
+
+
+def _etiqueta_regla_a_int(fila: dict) -> int | None:
+    try:
+        datos = _fila_a_datos_prediccion(fila)
+        riesgo, _ = clasificar_riesgo(datos)
+        return RISK_CLASS_TO_INT.get(riesgo)
+    except Exception:
+        return None
 
 
 # ================== FALLBACK ==================
@@ -196,31 +269,6 @@ RISK_INT_TO_TEXT = {
 }
 
 
-def _normalizar_etiqueta_riesgo(valor) -> str:
-    texto = str(valor or "").strip()
-    texto = "".join(
-        char for char in unicodedata.normalize("NFKD", texto)
-        if not unicodedata.combining(char)
-    )
-    texto = texto.upper()
-
-    equivalencias = {
-        "BAJO": "MEDIO",
-        "MODERADO": "MEDIO",
-        "SEVERO": "ALTO",
-        "NINGUNA": "NINGUNO",
-        "HOSPITALIZACION URGENTE": "HOSPITALIZACION",
-        "HOSPITALIZACION INMEDIATA": "HOSPITALIZACION",
-        "URGENTE": "HOSPITALIZACION",
-    }
-    return equivalencias.get(texto, texto)
-
-
-def _riesgo_texto_a_int(serie):
-    y_texto = serie.astype(str).map(_normalizar_etiqueta_riesgo)
-    return y_texto.map(RISK_CLASS_TO_INT)
-
-
 def cargar_modelo_ml(force=False) -> bool:
     global modelo, scaler
 
@@ -252,23 +300,12 @@ def cargar_modelo_ml(force=False) -> bool:
         for column in FEATURE_COLUMNS:
             df_model[column] = pd.to_numeric(df_model[column], errors="coerce")
 
-        y_num = None
-
-        if "riesgo_clase" in df.columns:
-            y_num = pd.to_numeric(df["riesgo_clase"], errors="coerce")
-            if y_num.isna().all():
-                y_num = None
-
-        if y_num is None and "Risk" in df.columns:
-            y_num = _riesgo_texto_a_int(df["Risk"])
-
-        if y_num is None and "riesgo" in df.columns:
-            y_num = _riesgo_texto_a_int(df["riesgo"])
-
-        if y_num is None:
+        df_model = df_model.dropna(subset=FEATURE_COLUMNS)
+        if df_model.empty:
             return False
 
-        df_model["riesgo_clase"] = y_num
+        # Entrenamiento alineado con reglas clinicas actuales.
+        df_model["riesgo_clase"] = df_model.apply(_etiqueta_regla_a_int, axis=1)
         required_columns = FEATURE_COLUMNS + ["riesgo_clase"]
 
         df_model = df_model.dropna(subset=required_columns)
@@ -284,7 +321,7 @@ def cargar_modelo_ml(force=False) -> bool:
         X_scaled = scaler_local.fit_transform(X)
 
         modelo_local = RandomForestClassifier(
-            n_estimators=300,
+            n_estimators=500,
             max_depth=10,
             random_state=42
         )
@@ -301,34 +338,45 @@ def cargar_modelo_ml(force=False) -> bool:
 
 
 def predecir_riesgo_ml(datos) -> tuple[str, float]:
+    riesgo_reglas, _ = clasificar_riesgo(datos)
+
     if modelo is None or scaler is None:
-        return "NO DISPONIBLE", 0.0
+        return riesgo_reglas, 0.0
 
     try:
-        X_input = [[
-            datos["age"],
-            datos["bmi"],
-            datos["sysbp"],
-            datos["diabp"],
-            datos["presion_art_media"],
-            datos["htn"],
-            datos["diabetes"],
-            datos["fam_htn"],
-            datos["fam_cardiopatia"],
-            datos["enf_renal_cronica"],
-            datos["embarazo_multiple"],
-            datos["muerte_fetal"],
-            datos["restriccion_fetal"],
-        ]]
+        import pandas as pd
+
+        X_input = pd.DataFrame([
+            {
+                "age": datos["age"],
+                "bmi": datos["bmi"],
+                "sysbp": datos["sysbp"],
+                "diabp": datos["diabp"],
+                "presion_art_media": datos["presion_art_media"],
+                "htn": datos["htn"],
+                "diabetes": datos["diabetes"],
+                "fam_htn": datos["fam_htn"],
+                "fam_cardiopatia": datos["fam_cardiopatia"],
+                "enf_renal_cronica": datos["enf_renal_cronica"],
+                "embarazo_multiple": datos["embarazo_multiple"],
+                "muerte_fetal": datos["muerte_fetal"],
+                "restriccion_fetal": datos["restriccion_fetal"],
+            }
+        ], columns=FEATURE_COLUMNS)
 
         X_scaled = scaler.transform(X_input)
         pred = modelo.predict(X_scaled)[0]
-        riesgo_ml = RISK_INT_TO_TEXT.get(int(pred), "NO DISPONIBLE")
-        confianza = max(modelo.predict_proba(X_scaled)[0]) * 100
+        riesgo_ml = RISK_INT_TO_TEXT.get(int(pred), riesgo_reglas)
+        confianza = float(max(modelo.predict_proba(X_scaled)[0]) * 100)
+
+        # Se fuerza consistencia con reglas clinicas para evitar discrepancias.
+        if riesgo_ml != riesgo_reglas:
+            return riesgo_reglas, round(confianza, 2)
+
         return riesgo_ml, round(confianza, 2)
 
     except Exception:
-        return "NO DISPONIBLE", 0.0
+        return riesgo_reglas, 0.0
 
 
 # ================== FUNCIÓN PRINCIPAL ==================

@@ -12,8 +12,14 @@ from app.routes import notas_routes
 from app.routes import reportes_routes
 from app.services import gemini_service
 from app.routes.auth_routes import router as auth_router
+from app.routes import medicacion_router
 
-app = FastAPI()
+app = FastAPI(
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+        "withCredentials": True,
+    }
+)
 
 
 def cargar_modelo_ml_seguro() -> bool:
@@ -164,6 +170,7 @@ app.include_router(actualizaciones_routes.router, prefix="/api", tags=["actualiz
 app.include_router(notas_routes.router, prefix="/api", tags=["notas"])
 app.include_router(reportes_routes.router, prefix="/api", tags=["reportes"])
 app.include_router(auth_router, prefix="/api", tags=["auth"])
+app.include_router(medicacion_router.router, prefix="/api", tags=["medicacion"])
 
 app.add_middleware(
     CORSMiddleware,

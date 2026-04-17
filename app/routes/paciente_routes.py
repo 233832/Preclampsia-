@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Body, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 from app.shared.config.database import get_db
 from app.models.Paciente import Paciente
@@ -9,8 +9,41 @@ from app.services.auth_service import get_current_user
 
 paciente_router = APIRouter(prefix="/pacientes", dependencies=[Depends(get_current_user)])
 
+PACIENTE_CREATE_DOCS_EXAMPLE = {
+    "nombre": "string",
+    "edad": 0,
+    "domicilio": "No especificado",
+    "estado_civil": "No especificado",
+    "ciudad": "No especificado",
+    "telefono": "No especificado",
+    "tipo_sangre": "A+",
+    "abortos_previos": 0,
+    "cesarea_previos": 0,
+    "embarazos_previos": 0,
+    "partos_previos": 0,
+    "hipertension_previa": False,
+    "diabetes": False,
+    "antecedentes_familia_hipertension": False,
+    "fam_cardiopatia": False,
+    "enf_renal_cronica": False,
+    "embarazo_multiple": False,
+    "muerte_fetal": False,
+    "restriccion_fetal": False,
+}
+
 @paciente_router.post("/", response_model=PacienteResponse, status_code=status.HTTP_201_CREATED)
-def create_paciente(paciente: PacienteCreate, db: Session = Depends(get_db)):
+def create_paciente(
+    paciente: PacienteCreate = Body(
+        ...,
+        openapi_examples={
+            "orden_base": {
+                "summary": "Payload base",
+                "value": PACIENTE_CREATE_DOCS_EXAMPLE,
+            }
+        },
+    ),
+    db: Session = Depends(get_db),
+):
     data = paciente.model_dump()  
     new_paciente = Paciente(**data)
     db.add(new_paciente)
