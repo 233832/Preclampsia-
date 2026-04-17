@@ -5,6 +5,7 @@ from datetime import datetime
 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer
+from app.services.medicacion_service import obtener_medicacion_por_riesgo
 
 
 ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))
@@ -63,12 +64,157 @@ def _si_no(valor) -> str:
     return "Sí" if bool(valor) else "No"
 
 
+def _formatear_numero(valor, decimales: int = 2) -> str:
+    try:
+        return f"{float(valor):.{decimales}f}"
+    except Exception:
+        return "N/A"
+
+
+def _obtener_pam_consulta(consulta) -> float:
+    pam = getattr(consulta, "pam", None)
+    try:
+        if pam is not None and float(pam) > 0:
+            return float(pam)
+    except Exception:
+        pass
+
+    try:
+        sistolica = float(getattr(consulta, "presion_sistolica", 0))
+        diastolica = float(getattr(consulta, "presion_diastolica", 0))
+        return (sistolica + 2 * diastolica) / 3
+    except Exception:
+        return 0.0
+
+
+def _obtener_medicacion_recomendada(riesgo) -> dict:
+    riesgo_norm = str(riesgo or "NINGUNO").strip().upper()
+    data = obtener_medicacion_por_riesgo(riesgo_norm)
+    if not data:
+        return {
+            "estado": "Sin recomendación",
+            "detalle": [],
+        }
+    return data
+
+
+def _resumen_medicacion_para_pdf(medicacion_data: dict) -> list[str]:
+    lineas: list[str] = []
+    estado = str(medicacion_data.get("estado") or "Sin recomendación")
+    lineas.append(f"Estado: {estado}")
+
+    detalle = medicacion_data.get("detalle") or []
+    if not detalle:
+        lineas.append("Sin fármacos para este nivel de riesgo.")
+        return lineas
+
+    for grupo in detalle:
+        grupo_nombre = str(grupo.get("grupo") or "Sin grupo")
+        lineas.append(f"{grupo_nombre}:")
+
+        for med in grupo.get("medicamentos") or []:
+            nombre = str(med.get("nombre") or "Sin nombre")
+
+            partes = []
+            if med.get("dosis"):
+                partes.append(f"dosis {med['dosis']}")
+            if med.get("frecuencia"):
+                partes.append(f"frecuencia {med['frecuencia']}")
+            if med.get("max"):
+                partes.append(f"máx {med['max']}")
+            if med.get("inicio"):
+                partes.append(f"inicio {med['inicio']}")
+            if med.get("horario"):
+                partes.append(f"horario {med['horario']}")
+            if med.get("suspension"):
+                partes.append(f"suspensión {med['suspension']}")
+
+            if partes:
+                lineas.append(f"- {nombre}: {' | '.join(partes)}")
+            else:
+                lineas.append(f"- {nombre}")
+
+            if med.get("alerta"):
+                lineas.append(f"  Alerta: {med['alerta']}")
+
+    return lineas
+
+
+def _render_medicacion_html(medicacion_data: dict) -> str:
+    estado = html.escape(str(medicacion_data.get("estado") or "Sin recomendación"))
+    detalle = medicacion_data.get("detalle") or []
+
+    if not detalle:
+        return f'<div class="med-empty">Estado: {estado}. Sin fármacos para este nivel de riesgo.</div>'
+
+    grupos_html = []
+    for grupo in detalle:
+        grupo_nombre = html.escape(str(grupo.get("grupo") or "Sin grupo"))
+
+        meds_html = []
+        for med in grupo.get("medicamentos") or []:
+            nombre = html.escape(str(med.get("nombre") or "Sin nombre"))
+            campos = []
+
+            for etiqueta, key in (
+                ("Dosis", "dosis"),
+                ("Frecuencia", "frecuencia"),
+                ("Máximo", "max"),
+                ("Inicio", "inicio"),
+                ("Horario", "horario"),
+                ("Suspensión", "suspension"),
+            ):
+                valor = med.get(key)
+                if valor:
+                    campos.append(
+                        f'<span><b>{etiqueta}:</b> {html.escape(str(valor))}</span>'
+                    )
+
+            alerta_html = ""
+            if med.get("alerta"):
+                alerta_html = (
+                    f'<div class="med-alerta">Alerta: {html.escape(str(med.get("alerta")))}</div>'
+                )
+
+            meds_html.append(
+                """
+                <div class="med-card">
+                    <div class="med-name">{nombre}</div>
+                    <div class="med-meta">{campos}</div>
+                    {alerta}
+                </div>
+                """.format(
+                    nombre=nombre,
+                    campos="".join(campos) if campos else "<span>Sin dosis registrada</span>",
+                    alerta=alerta_html,
+                )
+            )
+
+        grupos_html.append(
+            """
+            <div class="med-group">
+                <div class="med-group-title">{grupo}</div>
+                <div class="med-grid">{meds}</div>
+            </div>
+            """.format(
+                grupo=grupo_nombre,
+                meds="".join(meds_html),
+            )
+        )
+
+    return f'<div class="med-estado">Estado: {estado}</div>{"".join(grupos_html)}'
+
+
 def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score, interpretacion):
     doc = SimpleDocTemplate(ruta_pdf)
     styles = getSampleStyleSheet()
 
     texto_interpretacion = html.escape(str(interpretacion or "Sin interpretación disponible")).replace("\n", "<br/>")
     fecha_consulta = _formatear_fecha(getattr(consulta, "fecha_hora_consulta", None))
+    pam = _obtener_pam_consulta(consulta)
+    tipo_sangre = str(getattr(paciente, "tipo_sangre", None) or "No especificado")
+    medicacion_data = _obtener_medicacion_recomendada(riesgo)
+    lineas_medicacion = _resumen_medicacion_para_pdf(medicacion_data)
 
     contenido = []
 
@@ -89,6 +235,7 @@ def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score,
         Paragraph(f"Edad Paciente: {paciente.edad}", styles["Normal"]),
         Paragraph(f"Teléfono: {paciente.telefono}", styles["Normal"]),
         Paragraph(f"Ciudad: {paciente.ciudad}", styles["Normal"]),
+        Paragraph(f"Tipo de sangre: {tipo_sangre}", styles["Normal"]),
         Paragraph(f"Edad: {consulta.edad_madre}", styles["Normal"]),
         Paragraph(f"Edad Gestacional: {consulta.edad_gestacional}", styles["Normal"]),
         Paragraph(f"Peso: {consulta.peso}", styles["Normal"]),
@@ -96,12 +243,22 @@ def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score,
         Paragraph(f"IMC: {consulta.imc}", styles["Normal"]),
         Paragraph(f"Presión Sistólica: {consulta.presion_sistolica}", styles["Normal"]),
         Paragraph(f"Presión Diastólica: {consulta.presion_diastolica}", styles["Normal"]),
+        Paragraph(f"PAM: {_formatear_numero(pam)} mmHg", styles["Normal"]),
         Paragraph(f"Hipertensión previa: {_si_no(paciente.hipertension_previa)}", styles["Normal"]),
         Paragraph(f"Diabetes: {_si_no(paciente.diabetes)}", styles["Normal"]),
         Paragraph(
             f"Antecedentes familiares HTA: {_si_no(paciente.antecedentes_familia_hipertension)}",
             styles["Normal"],
         ),
+        Paragraph(f"Cardiopatía familiar: {_si_no(getattr(paciente, 'fam_cardiopatia', False))}", styles["Normal"]),
+        Paragraph(f"Enfermedad renal crónica: {_si_no(getattr(paciente, 'enf_renal_cronica', False))}", styles["Normal"]),
+        Paragraph(f"Embarazo múltiple: {_si_no(getattr(paciente, 'embarazo_multiple', False))}", styles["Normal"]),
+        Paragraph(f"Muerte fetal: {_si_no(getattr(paciente, 'muerte_fetal', False))}", styles["Normal"]),
+        Paragraph(f"Restricción fetal: {_si_no(getattr(paciente, 'restriccion_fetal', False))}", styles["Normal"]),
+        Paragraph(f"Abortos previos: {getattr(paciente, 'abortos_previos', 0)}", styles["Normal"]),
+        Paragraph(f"Cesáreas previas: {getattr(paciente, 'cesarea_previos', 0)}", styles["Normal"]),
+        Paragraph(f"Embarazos previos: {getattr(paciente, 'embarazos_previos', 0)}", styles["Normal"]),
+        Paragraph(f"Partos previos: {getattr(paciente, 'partos_previos', 0)}", styles["Normal"]),
         Spacer(1, 10),
         Paragraph(f"Riesgo: {riesgo}", styles["Heading3"]),
         Paragraph(f"Score: {score}", styles["Normal"]),
@@ -109,6 +266,14 @@ def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score,
         Paragraph("Interpretación Clínica", styles["Heading3"]),
         Paragraph(texto_interpretacion, styles["Normal"]),
     ])
+
+    contenido.extend([
+        Spacer(1, 10),
+        Paragraph("Medicación recomendada", styles["Heading3"]),
+    ])
+
+    for linea in lineas_medicacion:
+        contenido.append(Paragraph(html.escape(str(linea)), styles["Normal"]))
 
     doc.build(contenido)
 
@@ -147,18 +312,33 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
 
     logo_data_url = _obtener_logo_data_url()
     fecha_consulta = _formatear_fecha(getattr(consulta, "fecha_hora_consulta", None))
+    pam = _obtener_pam_consulta(consulta)
 
     nombre_paciente = html.escape(str(getattr(paciente, "nombre", "N/A") or "N/A"))
     ciudad = html.escape(str(getattr(paciente, "ciudad", "N/A") or "N/A"))
     telefono = html.escape(str(getattr(paciente, "telefono", "N/A") or "N/A"))
     domicilio = html.escape(str(getattr(paciente, "domicilio", "N/A") or "N/A"))
     estado_civil = html.escape(str(getattr(paciente, "estado_civil", "N/A") or "N/A"))
+    tipo_sangre = html.escape(str(getattr(paciente, "tipo_sangre", None) or "No especificado"))
 
     interpretacion_segura = html.escape(str(interpretacion or "Sin interpretación disponible")).replace("\n", "<br/>")
 
     antecedente_hta = _si_no(getattr(paciente, "hipertension_previa", False))
     antecedente_diabetes = _si_no(getattr(paciente, "diabetes", False))
     antecedente_familiar = _si_no(getattr(paciente, "antecedentes_familia_hipertension", False))
+    antecedente_cardio = _si_no(getattr(paciente, "fam_cardiopatia", False))
+    antecedente_renal = _si_no(getattr(paciente, "enf_renal_cronica", False))
+    antecedente_embarazo_multiple = _si_no(getattr(paciente, "embarazo_multiple", False))
+    antecedente_muerte_fetal = _si_no(getattr(paciente, "muerte_fetal", False))
+    antecedente_restriccion_fetal = _si_no(getattr(paciente, "restriccion_fetal", False))
+
+    abortos_previos = html.escape(str(getattr(paciente, "abortos_previos", 0) or 0))
+    cesareas_previas = html.escape(str(getattr(paciente, "cesarea_previos", 0) or 0))
+    embarazos_previos = html.escape(str(getattr(paciente, "embarazos_previos", 0) or 0))
+    partos_previos = html.escape(str(getattr(paciente, "partos_previos", 0) or 0))
+
+    medicacion_data = _obtener_medicacion_recomendada(riesgo_label)
+    medicacion_html = _render_medicacion_html(medicacion_data)
 
     logo_html = (
         f'<img class="brand-logo" src="{logo_data_url}" alt="Logo VitaPrenatal" />'
@@ -324,6 +504,104 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 color: #9c8292;
             }}
 
+            .group-grid {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px 12px;
+            }}
+
+            .subgroup {{
+                background: var(--white);
+                border: 1px solid #efdce8;
+                border-radius: 12px;
+                padding: 10px;
+            }}
+
+            .subgroup-title {{
+                font-size: 12px;
+                font-weight: bold;
+                color: #6b445b;
+                margin-bottom: 8px;
+            }}
+
+            .mini-list {{
+                display: grid;
+                gap: 6px;
+            }}
+
+            .mini-item {{
+                display: flex;
+                justify-content: space-between;
+                gap: 8px;
+                background: #fbf6fa;
+                border: 1px solid #f0e4eb;
+                border-radius: 8px;
+                padding: 6px 8px;
+                font-size: 12px;
+            }}
+
+            .med-estado {{
+                font-size: 12px;
+                margin-bottom: 10px;
+                color: #6f5a6a;
+            }}
+
+            .med-group {{
+                background: var(--white);
+                border: 1px solid #efdce8;
+                border-radius: 12px;
+                padding: 10px;
+                margin-bottom: 10px;
+            }}
+
+            .med-group-title {{
+                font-size: 12px;
+                font-weight: bold;
+                color: #6b445b;
+                margin-bottom: 8px;
+            }}
+
+            .med-grid {{
+                display: grid;
+                gap: 8px;
+            }}
+
+            .med-card {{
+                background: #fbf6fa;
+                border: 1px solid #f0e4eb;
+                border-radius: 10px;
+                padding: 8px;
+            }}
+
+            .med-name {{
+                font-weight: bold;
+                margin-bottom: 4px;
+            }}
+
+            .med-meta span {{
+                display: block;
+                font-size: 12px;
+                margin-bottom: 2px;
+            }}
+
+            .med-alerta {{
+                margin-top: 6px;
+                font-size: 11px;
+                color: #a1405f;
+                background: #fff1f5;
+                border: 1px solid #f5cddb;
+                border-radius: 8px;
+                padding: 5px 6px;
+            }}
+
+            .med-empty {{
+                background: var(--white);
+                border: 1px solid #efdce8;
+                border-radius: 10px;
+                padding: 8px;
+                font-size: 12px;
+            }}
+
             @media print {{
                 body {{
                     padding: 0;
@@ -413,6 +691,40 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                     margin-top: 8px;
                     font-size: 9px;
                 }}
+
+                .group-grid {{
+                    gap: 6px 8px;
+                }}
+
+                .subgroup {{
+                    padding: 6px 8px;
+                    border-radius: 8px;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }}
+
+                .mini-item {{
+                    padding: 4px 6px;
+                    font-size: 10px;
+                }}
+
+                .med-group {{
+                    padding: 8px;
+                    border-radius: 8px;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }}
+
+                .med-name {{
+                    font-size: 10px;
+                }}
+
+                .med-meta span,
+                .med-alerta,
+                .med-estado,
+                .med-empty {{
+                    font-size: 9px;
+                }}
             }}
         </style>
     </head>
@@ -458,6 +770,10 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                         <div class="label">Estado Civil</div>
                         <div class="value">{estado_civil}</div>
                     </div>
+                    <div class="card">
+                        <div class="label">Tipo de sangre</div>
+                        <div class="value">{tipo_sangre}</div>
+                    </div>
                 </div>
             </div>
 
@@ -493,6 +809,10 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                         <div class="value">{consulta.presion_diastolica} mmHg</div>
                     </div>
                     <div class="card">
+                        <div class="label">PAM</div>
+                        <div class="value">{_formatear_numero(pam)} mmHg</div>
+                    </div>
+                    <div class="card">
                         <div class="label">Hipertensión previa</div>
                         <div class="value">{antecedente_hta}</div>
                     </div>
@@ -503,6 +823,47 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                     <div class="card">
                         <div class="label">Antecedentes familiares HTA</div>
                         <div class="value">{antecedente_familiar}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Antecedentes</div>
+                <div class="group-grid">
+                    <div class="subgroup">
+                        <div class="subgroup-title">Heredo-familiares</div>
+                        <div class="mini-list">
+                            <div class="mini-item"><span>Cardiopatía familiar</span><b>{antecedente_cardio}</b></div>
+                            <div class="mini-item"><span>Antecedentes familiares HTA</span><b>{antecedente_familiar}</b></div>
+                        </div>
+                    </div>
+
+                    <div class="subgroup">
+                        <div class="subgroup-title">Personales patológicos</div>
+                        <div class="mini-list">
+                            <div class="mini-item"><span>Enfermedad renal crónica</span><b>{antecedente_renal}</b></div>
+                            <div class="mini-item"><span>Hipertensión previa</span><b>{antecedente_hta}</b></div>
+                            <div class="mini-item"><span>Diabetes</span><b>{antecedente_diabetes}</b></div>
+                        </div>
+                    </div>
+
+                    <div class="subgroup">
+                        <div class="subgroup-title">Ginecoobstétricos</div>
+                        <div class="mini-list">
+                            <div class="mini-item"><span>Abortos previos</span><b>{abortos_previos}</b></div>
+                            <div class="mini-item"><span>Cesáreas previas</span><b>{cesareas_previas}</b></div>
+                            <div class="mini-item"><span>Embarazos previos</span><b>{embarazos_previos}</b></div>
+                            <div class="mini-item"><span>Partos previos</span><b>{partos_previos}</b></div>
+                        </div>
+                    </div>
+
+                    <div class="subgroup">
+                        <div class="subgroup-title">Otros</div>
+                        <div class="mini-list">
+                            <div class="mini-item"><span>Embarazo múltiple</span><b>{antecedente_embarazo_multiple}</b></div>
+                            <div class="mini-item"><span>Muerte fetal</span><b>{antecedente_muerte_fetal}</b></div>
+                            <div class="mini-item"><span>Restricción fetal</span><b>{antecedente_restriccion_fetal}</b></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -523,6 +884,11 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
             <div class="section">
                 <div class="section-title">Interpretación Clínica</div>
                 <div class="interpretacion">{interpretacion_segura}</div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Medicación recomendada</div>
+                {medicacion_html}
             </div>
 
             <div class="footer">

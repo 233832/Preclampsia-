@@ -1,8 +1,26 @@
 def obtener_medicacion_por_riesgo(riesgo: str):
     data = {
         "NINGUNO": {
-            "estado": "No indicada",
-            "detalle": []
+            "estado": "Seguimiento",
+            "detalle": [
+                {
+                    "grupo": "Seguimiento ambulatorio",
+                    "medicamentos": [
+                        {
+                            "nombre": "Alfametildopa",
+                            "dosis": "250–500 mg VO cada 8 h",
+                            "max": "2 g/día",
+                            "alerta": "No exceder 2 g/día."
+                        },
+                        {
+                            "nombre": "Nifedipino LP",
+                            "dosis": "20–60 mg VO cada 24 h",
+                            "max": "120 mg/día",
+                            "alerta": "Usar solo formulación LP."
+                        }
+                    ]
+                }
+            ]
         },
 
         "MEDIO": {

@@ -76,13 +76,6 @@ def obtener_reporte(consulta_id: int):
 
         ruta_pdf = obtener_ruta_pdf(consulta_id)
 
-        if os.path.exists(ruta_pdf):
-            return FileResponse(
-                ruta_pdf,
-                media_type="application/pdf",
-                filename=f"reporte_{consulta_id}.pdf"
-            )
-
         try:
             generar_pdf(
                 consulta=consulta,
