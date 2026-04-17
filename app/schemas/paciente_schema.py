@@ -2,6 +2,28 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 TIPOS_SANGRE_VALIDOS = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
 
+PACIENTE_EJEMPLO_VALIDO = {
+    "nombre": "",
+    "edad": 0,
+    "domicilio": "",
+    "estado_civil": "",
+    "ciudad": "",
+    "telefono": "",
+    "tipo_sangre": None,
+    "abortos_previos": 0,
+    "cesarea_previos": 0,
+    "embarazos_previos": 0,
+    "partos_previos": 0,
+    "hipertension_previa": False,
+    "diabetes": False,
+    "antecedentes_familia_hipertension": False,
+    "fam_cardiopatia": False,
+    "enf_renal_cronica": False,
+    "embarazo_multiple": False,
+    "muerte_fetal": False,
+    "restriccion_fetal": False,
+}
+
 class PacienteBase(BaseModel):
     nombre: str
     edad: int
@@ -9,7 +31,12 @@ class PacienteBase(BaseModel):
     estado_civil: str = "No especificado"
     ciudad: str = "No especificado"
     telefono: str = "No especificado"
-    tipo_sangre: str | None = Field(default=None, max_length=5)
+    tipo_sangre: str | None = Field(
+        default=None,
+        max_length=5,
+        description="Opcional. Valores validos: A+, A-, B+, B-, AB+, AB-, O+, O-.",
+        examples=["A+", "O-"],
+    )
     abortos_previos: int = Field(default=0, ge=0)
     cesarea_previos: int = Field(default=0, ge=0)
     embarazos_previos: int = Field(default=0, ge=0)
@@ -24,7 +51,10 @@ class PacienteBase(BaseModel):
     muerte_fetal: bool = False
     restriccion_fetal: bool = False
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={"example": PACIENTE_EJEMPLO_VALIDO},
+    )
 
     @field_validator("domicilio", "estado_civil", "ciudad", "telefono", mode="before")
     @classmethod

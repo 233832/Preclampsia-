@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from app.shared.config.database import get_db
 from app.models.Usuario import Usuario
 from app.schemas.usuario_schema import UsuarioCreate, UsuarioLogin, UsuarioResponse
 from app.services.auth_service import (
+    ACCESS_TOKEN_EXPIRE_HOURS,
     get_password_hash,
     verify_password,
     create_access_token
@@ -36,7 +37,7 @@ def register(user: UsuarioCreate, db: Session = Depends(get_db)):
 
 # 🔹 LOGIN
 @router.post("/login")
-def login(user: UsuarioLogin, db: Session = Depends(get_db)):
+def login(user: UsuarioLogin, response: Response, db: Session = Depends(get_db)):
 
     db_user = db.query(Usuario).filter(Usuario.email == user.email).first()
 
@@ -47,6 +48,15 @@ def login(user: UsuarioLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
 
     token = create_access_token(data={"sub": db_user.email})
+
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {token}",
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600,
+    )
 
     return {
         "access_token": token,
