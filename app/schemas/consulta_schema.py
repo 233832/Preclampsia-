@@ -28,3 +28,8 @@ class ConsultaCreate(ConsultaBase):
 class ConsultaResponse(ConsultaBase):
     id: int
     riesgo: RiesgoEnum
+    score_total: float | None = None
+    riesgo_ml: str | None = None
+    riesgo_ml_modelo: str | None = None
+    confianza_ml: float | None = None
+    interpretacion: str | None = None
