@@ -22,7 +22,7 @@ GEMINI_DISPONIBLE = client is not None
 
 
 # ================== UMBRALES CLINICOS ==================
-SCORE_TOTAL_MAX = 33.19
+SCORE_TOTAL_MAX = 40.38
 SCORE_MEDIO_MAX = 13.7
 
 PRESION_SISTOLICA_MEDIO = 140
@@ -36,6 +36,7 @@ FACTORES_ALTO_AUTO = (
     "htn",
     "enf_renal_cronica",
     "embarazo_multiple",
+    "antecedente_preeclampsia_embarazo_previo",
 )
 
 
@@ -55,6 +56,7 @@ def calcular_factores(datos):
     fam_cardio = datos["fam_cardiopatia"]
     renal = datos["enf_renal_cronica"]
     multiple = datos["embarazo_multiple"]
+    antecedente_preeclampsia = int(datos.get("antecedente_preeclampsia_embarazo_previo", 0) or 0)
     muerte = datos["muerte_fetal"]
     rcf = datos["restriccion_fetal"]
 
@@ -93,6 +95,9 @@ def calcular_factores(datos):
 
     if multiple == 1:
         factores.append(("multiple", 2.9))
+
+    if antecedente_preeclampsia == 1:
+        factores.append(("antecedente_preeclampsia_embarazo_previo", 7.19))
 
     # 🔴 CRISIS HIPERTENSIVA
     if sysbp >= PRESION_SISTOLICA_HOSP or diabp >= PRESION_DIASTOLICA_HOSP:
@@ -173,6 +178,7 @@ def _fila_a_datos_prediccion(fila: dict) -> dict:
         "fam_cardiopatia": int(round(float(fila["fam_cardiopatia"]))),
         "enf_renal_cronica": int(round(float(fila["enf_renal_cronica"]))),
         "embarazo_multiple": int(round(float(fila["embarazo_multiple"]))),
+        "antecedente_preeclampsia_embarazo_previo": int(round(float(fila.get("antecedente_preeclampsia_embarazo_previo", 0) or 0))),
         "muerte_fetal": int(round(float(fila["muerte_fetal"]))),
         "restriccion_fetal": int(round(float(fila["restriccion_fetal"]))),
     }
@@ -251,8 +257,31 @@ FEATURE_COLUMNS = [
     "age", "bmi", "sysbp", "diabp", "presion_art_media",
     "htn", "diabetes", "fam_htn", "fam_cardiopatia",
     "enf_renal_cronica", "embarazo_multiple",
+    "antecedente_preeclampsia_embarazo_previo",
     "muerte_fetal", "restriccion_fetal",
 ]
+
+FEATURE_COLUMN_ALIASES = {
+    "antecedente_preeclampsia_embarazo_previo": ("antec_preeclampsia_previa",),
+}
+
+
+def _normalizar_columnas_dataset(df):
+    rename_map = {}
+
+    for columna_canonica, aliases in FEATURE_COLUMN_ALIASES.items():
+        if columna_canonica in df.columns:
+            continue
+
+        for alias in aliases:
+            if alias in df.columns:
+                rename_map[alias] = columna_canonica
+                break
+
+    if rename_map:
+        return df.rename(columns=rename_map)
+
+    return df
 
 RISK_CLASS_TO_INT = {
     "NINGUNO": 0,
@@ -284,7 +313,7 @@ def cargar_modelo_ml(force=False) -> bool:
         from sklearn.preprocessing import StandardScaler
 
         path = os.path.join(
-            os.path.dirname(__file__), "..", "data", "preeclampsia_bd6.xlsx"
+            os.path.dirname(__file__), "..", "data", "preeclampsia_bd7.xlsx"
         )
         path = os.path.abspath(path)
 
@@ -292,6 +321,7 @@ def cargar_modelo_ml(force=False) -> bool:
             return False
 
         df = pd.read_excel(path)
+        df = _normalizar_columnas_dataset(df)
         if not set(FEATURE_COLUMNS).issubset(df.columns):
             return False
 
@@ -359,6 +389,7 @@ def predecir_riesgo_ml(datos) -> tuple[str, float]:
                 "fam_cardiopatia": datos["fam_cardiopatia"],
                 "enf_renal_cronica": datos["enf_renal_cronica"],
                 "embarazo_multiple": datos["embarazo_multiple"],
+                "antecedente_preeclampsia_embarazo_previo": datos.get("antecedente_preeclampsia_embarazo_previo", 0),
                 "muerte_fetal": datos["muerte_fetal"],
                 "restriccion_fetal": datos["restriccion_fetal"],
             }

@@ -21,6 +21,78 @@ from app.services.auth_service import get_current_user
 consulta_router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
+def _bool_a_int(valor: bool) -> int:
+    return 1 if bool(valor) else 0
+
+
+def _calcular_pam(sistolica: float, diastolica: float) -> float:
+    return (sistolica + 2 * diastolica) / 3
+
+
+def _armar_datos_prediccion(consulta, paciente: Paciente) -> dict:
+    sistolica = float(getattr(consulta, "presion_sistolica", 0) or 0)
+    diastolica = float(getattr(consulta, "presion_diastolica", 0) or 0)
+
+    pam_existente = getattr(consulta, "pam", None)
+    try:
+        pam = float(pam_existente) if pam_existente is not None else 0.0
+    except Exception:
+        pam = 0.0
+
+    if pam <= 0:
+        pam = _calcular_pam(sistolica, diastolica)
+
+    return {
+        "age": float(getattr(consulta, "edad_madre", 0) or 0),
+        "bmi": float(getattr(consulta, "imc", 0) or 0),
+        "sysbp": sistolica,
+        "diabp": diastolica,
+        "presion_art_media": pam,
+        "htn": _bool_a_int(getattr(paciente, "hipertension_previa", False)),
+        "diabetes": _bool_a_int(getattr(paciente, "diabetes", False)),
+        "fam_htn": _bool_a_int(getattr(paciente, "antecedentes_familia_hipertension", False)),
+        "fam_cardiopatia": _bool_a_int(getattr(paciente, "fam_cardiopatia", False)),
+        "enf_renal_cronica": _bool_a_int(getattr(paciente, "enf_renal_cronica", False)),
+        "embarazo_multiple": _bool_a_int(getattr(paciente, "embarazo_multiple", False)),
+        "antecedente_preeclampsia_embarazo_previo": _bool_a_int(
+            getattr(paciente, "antecedente_preeclampsia_embarazo_previo", False)
+        ),
+        "muerte_fetal": _bool_a_int(getattr(paciente, "muerte_fetal", False)),
+        "restriccion_fetal": _bool_a_int(getattr(paciente, "restriccion_fetal", False)),
+    }
+
+
+def _calcular_resultados_consulta(consulta, paciente: Paciente) -> dict:
+    datos_prediccion = _armar_datos_prediccion(consulta, paciente)
+
+    riesgo_str, score_total = clasificar_riesgo(datos_prediccion)
+    riesgo_enum = normalizar_riesgo_enum(riesgo_str)
+
+    riesgo_ml_modelo, confianza_ml = predecir_riesgo_ml(datos_prediccion)
+    try:
+        confianza_ml_float = float(confianza_ml)
+    except Exception:
+        confianza_ml_float = 0.0
+
+    return {
+        "pam": float(datos_prediccion["presion_art_media"]),
+        "riesgo_enum": riesgo_enum,
+        "score_total": score_total,
+        "riesgo_ml": riesgo_enum.name,
+        "riesgo_ml_modelo": str(riesgo_ml_modelo),
+        "confianza_ml": confianza_ml_float,
+    }
+
+
+def _adjuntar_resultados_a_consulta(consulta: Consulta, resultados: dict) -> None:
+    consulta.pam = resultados["pam"]
+    consulta.riesgo = resultados["riesgo_enum"]
+    consulta.score_total = resultados["score_total"]
+    consulta.riesgo_ml = resultados["riesgo_ml"]
+    consulta.riesgo_ml_modelo = resultados["riesgo_ml_modelo"]
+    consulta.confianza_ml = resultados["confianza_ml"]
+
+
 def normalizar_riesgo_enum(valor_riesgo) -> RiesgoEnum:
     if isinstance(valor_riesgo, RiesgoEnum):
         return valor_riesgo
@@ -175,56 +247,27 @@ def generar_pdf_reportlab_fallback(
 
 @consulta_router.post("/consultas/", response_model=ConsultaResponse, status_code=status.HTTP_201_CREATED)
 def create_consulta(consulta: ConsultaCreate, db: Session = Depends(get_db)):
-    if not db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first():
+    paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
+    if not paciente:
         raise HTTPException(status_code=404, detail="Paciente not found")
+
     if not db.query(ExpedienteClinico).filter(ExpedienteClinico.id == consulta.expediente_id).first():
         raise HTTPException(status_code=404, detail="ExpedienteClinico not found")
 
-    # Obtener datos del paciente para cálculo de riesgo
-    paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
-    
-    # Convertir booleanos a 0/1
-    htn = 1 if paciente.hipertension_previa else 0
-    diabetes = 1 if paciente.diabetes else 0
-    fam_htn = 1 if paciente.antecedentes_familia_hipertension else 0
-    fam_cardio = 1 if paciente.fam_cardiopatia else 0
-    renal = 1 if paciente.enf_renal_cronica else 0
-    multiple = 1 if paciente.embarazo_multiple else 0
-    muerte = 1 if paciente.muerte_fetal else 0
-    rcf = 1 if paciente.restriccion_fetal else 0
-    pam = (consulta.presion_sistolica + 2 * consulta.presion_diastolica) / 3
-    
-    # Calcular riesgo
-    riesgo_str, _ = clasificar_riesgo(
-        {
-            "age": consulta.edad_madre,
-            "bmi": consulta.imc,
-            "sysbp": consulta.presion_sistolica,
-            "diabp": consulta.presion_diastolica,
-            "presion_art_media": pam,
-            "htn": htn,
-            "diabetes": diabetes,
-            "fam_htn": fam_htn,
-            "fam_cardiopatia": fam_cardio,
-            "enf_renal_cronica": renal,
-            "embarazo_multiple": multiple,
-            "muerte_fetal": muerte,
-            "restriccion_fetal": rcf,
-        }
-    )
-    
-    # Mapear string a enum
-    riesgo_enum = normalizar_riesgo_enum(riesgo_str)
+    resultados = _calcular_resultados_consulta(consulta, paciente)
     
     # Crear consulta con riesgo calculado
     new_consulta = Consulta(
-        **consulta.dict(exclude={"pam"}),
-        pam=pam,
-        riesgo=riesgo_enum
+        **consulta.model_dump(exclude={"pam"}),
+        pam=resultados["pam"],
+        riesgo=resultados["riesgo_enum"],
+        score_total=resultados["score_total"],
     )
     db.add(new_consulta)
     db.commit()
     db.refresh(new_consulta)
+
+    _adjuntar_resultados_a_consulta(new_consulta, resultados)
     
     # NOTIFICACIÓN AUTOMÁTICA
     crear_notificacion(
@@ -248,7 +291,13 @@ def read_consultas(
     consultas = db.query(Consulta).offset(skip).limit(limit).all()
     
     for consulta in consultas:
-        consulta.riesgo = normalizar_riesgo_enum(consulta.riesgo)
+        paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
+        if not paciente:
+            consulta.riesgo = normalizar_riesgo_enum(consulta.riesgo)
+            continue
+
+        resultados = _calcular_resultados_consulta(consulta, paciente)
+        _adjuntar_resultados_a_consulta(consulta, resultados)
     
     return consultas
 
@@ -257,7 +306,13 @@ def read_consulta(consulta_id: int, db: Session = Depends(get_db)):
     consulta = db.query(Consulta).filter(Consulta.id == consulta_id).first()
     if not consulta:
         raise HTTPException(status_code=404, detail="Consulta not found")
-    consulta.riesgo = normalizar_riesgo_enum(consulta.riesgo)
+
+    paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
+    if not paciente:
+        raise HTTPException(status_code=404, detail="Paciente not found")
+
+    resultados = _calcular_resultados_consulta(consulta, paciente)
+    _adjuntar_resultados_a_consulta(consulta, resultados)
     return consulta
 
 @consulta_router.put("/consultas/{consulta_id}", response_model=ConsultaResponse)
@@ -276,44 +331,18 @@ def update_consulta(consulta_id: int, consulta_data: ConsultaCreate, db: Session
     for key, value in consulta_data.model_dump(exclude={"pam"}).items():
         setattr(consulta, key, value)
 
-    htn = 1 if paciente.hipertension_previa else 0
-    diabetes = 1 if paciente.diabetes else 0
-    fam_htn = 1 if paciente.antecedentes_familia_hipertension else 0
-    fam_cardio = 1 if paciente.fam_cardiopatia else 0
-    renal = 1 if paciente.enf_renal_cronica else 0
-    multiple = 1 if paciente.embarazo_multiple else 0
-    muerte = 1 if paciente.muerte_fetal else 0
-    rcf = 1 if paciente.restriccion_fetal else 0
-
-    pam = (consulta.presion_sistolica + 2 * consulta.presion_diastolica) / 3
-    consulta.pam = pam
-
-    riesgo_str, _ = clasificar_riesgo(
-        {
-            "age": consulta.edad_madre,
-            "bmi": consulta.imc,
-            "sysbp": consulta.presion_sistolica,
-            "diabp": consulta.presion_diastolica,
-            "presion_art_media": pam,
-            "htn": htn,
-            "diabetes": diabetes,
-            "fam_htn": fam_htn,
-            "fam_cardiopatia": fam_cardio,
-            "enf_renal_cronica": renal,
-            "embarazo_multiple": multiple,
-            "muerte_fetal": muerte,
-            "restriccion_fetal": rcf,
-        }
-    )
-    consulta.riesgo = normalizar_riesgo_enum(riesgo_str)
+    resultados = _calcular_resultados_consulta(consulta, paciente)
+    consulta.pam = resultados["pam"]
+    consulta.riesgo = resultados["riesgo_enum"]
+    consulta.score_total = resultados["score_total"]
 
     # Fuerza recalculo en /prediccion para evitar interpretaciones desactualizadas
     consulta.interpretacion = None
-    consulta.score_total = None
 
     db.commit()
     db.refresh(consulta)
-    consulta.riesgo = normalizar_riesgo_enum(consulta.riesgo)
+
+    _adjuntar_resultados_a_consulta(consulta, resultados)
     return consulta
 
 @consulta_router.delete("/consultas/{consulta_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -343,111 +372,37 @@ def prediccion_consulta(consulta_id: int, db: Session = Depends(get_db)):
             db.commit()
             db.refresh(consulta)
 
-        # Preparar datos para score/riesgo ML y predicción completa
-        htn = 1 if paciente.hipertension_previa else 0
-        diabetes = 1 if paciente.diabetes else 0
-        fam_htn = 1 if paciente.antecedentes_familia_hipertension else 0
-        fam_cardio = 1 if paciente.fam_cardiopatia else 0
-        renal = 1 if paciente.enf_renal_cronica else 0
-        multiple = 1 if paciente.embarazo_multiple else 0
-        muerte = 1 if paciente.muerte_fetal else 0
-        rcf = 1 if paciente.restriccion_fetal else 0
-        pam = consulta.pam if consulta.pam is not None and consulta.pam > 0 else (
-            (consulta.presion_sistolica + 2 * consulta.presion_diastolica) / 3
-        )
-        datos_prediccion = {
-            "age": consulta.edad_madre,
-            "bmi": consulta.imc,
-            "sysbp": consulta.presion_sistolica,
-            "diabp": consulta.presion_diastolica,
-            "presion_art_media": pam,
-            "htn": htn,
-            "diabetes": diabetes,
-            "fam_htn": fam_htn,
-            "fam_cardiopatia": fam_cardio,
-            "enf_renal_cronica": renal,
-            "embarazo_multiple": multiple,
-            "muerte_fetal": muerte,
-            "restriccion_fetal": rcf,
-        }
-
-        riesgo_reglas_str, score_reglas = clasificar_riesgo(datos_prediccion)
-        riesgo_reglas = normalizar_riesgo_enum(riesgo_reglas_str)
+        datos_prediccion = _armar_datos_prediccion(consulta, paciente)
+        resultados = _calcular_resultados_consulta(consulta, paciente)
 
         hubo_cambios = False
-        if consulta.pam != pam:
-            consulta.pam = pam
+        if consulta.pam != resultados["pam"]:
+            consulta.pam = resultados["pam"]
             hubo_cambios = True
-        if consulta.riesgo != riesgo_reglas:
-            consulta.riesgo = riesgo_reglas
+        if consulta.riesgo != resultados["riesgo_enum"]:
+            consulta.riesgo = resultados["riesgo_enum"]
             hubo_cambios = True
-        if consulta.score_total != score_reglas:
-            consulta.score_total = score_reglas
+        if consulta.score_total != resultados["score_total"]:
+            consulta.score_total = resultados["score_total"]
+            hubo_cambios = True
+
+        prediccion = generar_prediccion_gemini(datos_prediccion)
+        if not prediccion:
+            raise Exception("Predicción vacía")
+
+        interpretacion = str(prediccion.get("interpretacion") or "Sin interpretación disponible")
+        if consulta.interpretacion != interpretacion:
+            consulta.interpretacion = interpretacion
             hubo_cambios = True
 
         if hubo_cambios:
             db.commit()
             db.refresh(consulta)
 
-        riesgo_ml_modelo_actual, confianza_ml_actual = predecir_riesgo_ml(datos_prediccion)
-        riesgo_ml_alineado = riesgo_reglas.name
-
-        # 1. EVITAR VOLVER A USAR IA (CLAVE)
-        if consulta.interpretacion and consulta.score_total is not None:
-            return {
-                "consulta_id": consulta.id,
-                "paciente_id": consulta.paciente_id,
-                "riesgo": riesgo_reglas.name,
-                "riesgo_ml": riesgo_ml_alineado,
-                "riesgo_ml_modelo": riesgo_ml_modelo_actual,
-                "score_total": score_reglas,
-                "confianza_ml": confianza_ml_actual,
-                "interpretacion": consulta.interpretacion,
-                "datos_consulta": {
-                    "edad_madre": consulta.edad_madre,
-                    "imc": consulta.imc,
-                    "presion_sistolica": consulta.presion_sistolica,
-                    "presion_diastolica": consulta.presion_diastolica,
-                    "hipertension_previa": bool(htn),
-                    "diabetes": bool(diabetes),
-                    "antecedentes_familia_hipertension": bool(fam_htn),
-                },
-            }
-
-        # 3. Generar predicción (IA SOLO UNA VEZ)
-        prediccion = generar_prediccion_gemini(datos_prediccion)
-
-        if not prediccion:
-            raise Exception("Predicción vacía")
-
-        riesgo_predicho = normalizar_riesgo_enum(prediccion.get("riesgo"))
-
-        # 4. GUARDAR RESULTADO (CLAVE)
-        consulta.riesgo = riesgo_predicho
-        consulta.interpretacion = prediccion["interpretacion"]
-        consulta.score_total = prediccion["score_total"]
-
-        db.commit()
-
-        # 5. Retornar
         return {
             "consulta_id": consulta.id,
             "paciente_id": consulta.paciente_id,
-            "riesgo": riesgo_predicho.name,
-            "riesgo_ml": riesgo_predicho.name,
-            "riesgo_ml_modelo": prediccion.get("riesgo_ml", "NO DISPONIBLE"),
-            "score_total": prediccion["score_total"],
-            "confianza_ml": prediccion["confianza_ml"],
-            "interpretacion": prediccion["interpretacion"],
-            "datos_consulta": {
-                "edad_madre": consulta.edad_madre,
-                "imc": consulta.imc,
-                "presion_sistolica": consulta.presion_sistolica,
-                "presion_diastolica": consulta.presion_diastolica,
-                "hipertension_previa": bool(htn),
-                "diabetes": bool(diabetes),
-                "antecedentes_familia_hipertension": bool(fam_htn),
-            },
+            "interpretacion": interpretacion,
         }
 
     except HTTPException:
@@ -458,12 +413,6 @@ def prediccion_consulta(consulta_id: int, db: Session = Depends(get_db)):
         return {
             "consulta_id": consulta_id,
             "paciente_id": None,
-            "riesgo": "NINGUNO",
-            "riesgo_ml": "NO DISPONIBLE",
-            "riesgo_ml_modelo": "NO DISPONIBLE",
-            "score_total": 0,
-            "confianza_ml": 0,
             "interpretacion": f"Error en backend: {e}",
-            "datos_consulta": {}
         }
 
