@@ -14,6 +14,7 @@ PACIENTE_EJEMPLO_VALIDO = {
     "cesarea_previos": 0,
     "embarazos_previos": 0,
     "partos_previos": 0,
+    "antecedente_preeclampsia_embarazo_previo": False,
     "hipertension_previa": False,
     "diabetes": False,
     "antecedentes_familia_hipertension": False,
@@ -41,6 +42,7 @@ class PacienteBase(BaseModel):
     cesarea_previos: int = Field(default=0, ge=0)
     embarazos_previos: int = Field(default=0, ge=0)
     partos_previos: int = Field(default=0, ge=0)
+    antecedente_preeclampsia_embarazo_previo: bool = False
 
     hipertension_previa: bool = False
     diabetes: bool = False

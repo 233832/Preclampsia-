@@ -54,6 +54,9 @@ def _armar_datos_prediccion(consulta, paciente: Paciente) -> dict:
         "fam_cardiopatia": _bool_a_int(getattr(paciente, "fam_cardiopatia", False)),
         "enf_renal_cronica": _bool_a_int(getattr(paciente, "enf_renal_cronica", False)),
         "embarazo_multiple": _bool_a_int(getattr(paciente, "embarazo_multiple", False)),
+        "antecedente_preeclampsia_embarazo_previo": _bool_a_int(
+            getattr(paciente, "antecedente_preeclampsia_embarazo_previo", False)
+        ),
         "muerte_fetal": _bool_a_int(getattr(paciente, "muerte_fetal", False)),
         "restriccion_fetal": _bool_a_int(getattr(paciente, "restriccion_fetal", False)),
     }

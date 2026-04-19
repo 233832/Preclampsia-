@@ -253,6 +253,11 @@ def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score,
         Paragraph(f"Cardiopatía familiar: {_si_no(getattr(paciente, 'fam_cardiopatia', False))}", styles["Normal"]),
         Paragraph(f"Enfermedad renal crónica: {_si_no(getattr(paciente, 'enf_renal_cronica', False))}", styles["Normal"]),
         Paragraph(f"Embarazo múltiple: {_si_no(getattr(paciente, 'embarazo_multiple', False))}", styles["Normal"]),
+        Paragraph(
+            f"Antecedente de preeclampsia en embarazo previo: "
+            f"{_si_no(getattr(paciente, 'antecedente_preeclampsia_embarazo_previo', False))}",
+            styles["Normal"],
+        ),
         Paragraph(f"Muerte fetal: {_si_no(getattr(paciente, 'muerte_fetal', False))}", styles["Normal"]),
         Paragraph(f"Restricción fetal: {_si_no(getattr(paciente, 'restriccion_fetal', False))}", styles["Normal"]),
         Paragraph(f"Abortos previos: {getattr(paciente, 'abortos_previos', 0)}", styles["Normal"]),
@@ -329,6 +334,9 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
     antecedente_cardio = _si_no(getattr(paciente, "fam_cardiopatia", False))
     antecedente_renal = _si_no(getattr(paciente, "enf_renal_cronica", False))
     antecedente_embarazo_multiple = _si_no(getattr(paciente, "embarazo_multiple", False))
+    antecedente_preeclampsia_previa = _si_no(
+        getattr(paciente, "antecedente_preeclampsia_embarazo_previo", False)
+    )
     antecedente_muerte_fetal = _si_no(getattr(paciente, "muerte_fetal", False))
     antecedente_restriccion_fetal = _si_no(getattr(paciente, "restriccion_fetal", False))
 
@@ -370,7 +378,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
             }}
 
             body {{
-                font-family: 'Segoe UI';
+                font-family: Helvetica, Arial, sans-serif;
                 margin: 0;
                 padding: 32px;
                 background: radial-gradient(circle at top right, #ffeaf5 0%, #f8f1f5 42%, #f4ecf2 100%);
@@ -388,10 +396,9 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
             }}
 
             .header {{
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 22px;
+                display: table;
+                width: 100%;
+                table-layout: fixed;
                 margin-bottom: 24px;
                 padding: 16px 18px;
                 border-radius: 18px;
@@ -399,27 +406,42 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 border: 1px solid #efd4e3;
             }}
 
+            .header-main {{
+                display: table-cell;
+                width: 72%;
+                vertical-align: middle;
+                padding-right: 14px;
+            }}
+
+            .header-logo {{
+                display: table-cell;
+                width: 28%;
+                text-align: right;
+                vertical-align: middle;
+            }}
+
             .brand-logo {{
-                width: 180px;
-                height: 180px;
-                object-fit: contain;
+                width: 110px;
+                height: 110px;
                 display: block;
+                margin-left: auto;
             }}
 
             .brand-fallback {{
-                width: 180px;
-                height: 180px;
+                width: 110px;
+                height: 110px;
                 border-radius: 16px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                display: table;
+                margin-left: auto;
                 background: var(--brand-soft);
                 color: var(--brand-dark);
                 font-weight: 700;
+                text-align: center;
+                line-height: 110px;
             }}
 
             .title {{
-                font-size: 30px;
+                font-size: 29px;
                 font-weight: bold;
                 color: #5a3350;
                 letter-spacing: 0.3px;
@@ -443,6 +465,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 border-radius: 16px;
                 background: var(--brand-muted);
                 border: 1px solid #ecd6e4;
+                page-break-inside: auto;
             }}
 
             .section-title {{
@@ -455,26 +478,54 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
             }}
 
             .grid {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 10px 12px;
+                font-size: 0;
             }}
 
             .card {{
+                display: inline-block;
+                width: 49%;
+                margin: 0 2% 10px 0;
+                vertical-align: top;
                 background: var(--white);
-                padding: 10px;
+                padding: 10px 12px;
                 border-radius: 12px;
                 border: 1px solid #efdce8;
+                min-height: 58px;
+            }}
+
+            .card:nth-child(2n) {{
+                margin-right: 0;
+            }}
+
+            .card.span-2 {{
+                width: 100%;
+                margin-right: 0;
             }}
 
             .label {{
                 font-size: 11px;
                 color: #967d8d;
+                line-height: 1.2;
             }}
 
             .value {{
                 font-weight: bold;
-                margin-top: 2px;
+                margin-top: 3px;
+                font-size: 16px;
+                line-height: 1.15;
+                color: #3f2a3a;
+                word-break: break-word;
+                overflow-wrap: anywhere;
+            }}
+
+            .score-card {{
+                min-height: auto;
+                padding-top: 12px;
+                padding-bottom: 12px;
+            }}
+
+            .score-value {{
+                font-size: 28px;
             }}
 
             .riesgo {{
@@ -505,39 +556,66 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
             }}
 
             .group-grid {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 10px 12px;
+                font-size: 0;
             }}
 
             .subgroup {{
+                display: inline-block;
+                width: 49%;
+                margin: 0 2% 10px 0;
+                vertical-align: top;
                 background: var(--white);
                 border: 1px solid #efdce8;
                 border-radius: 12px;
                 padding: 10px;
+                min-height: 100%;
+            }}
+
+            .subgroup:nth-child(2n) {{
+                margin-right: 0;
             }}
 
             .subgroup-title {{
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: bold;
                 color: #6b445b;
                 margin-bottom: 8px;
             }}
 
             .mini-list {{
-                display: grid;
-                gap: 6px;
+                display: block;
             }}
 
             .mini-item {{
-                display: flex;
-                justify-content: space-between;
-                gap: 8px;
+                display: table;
+                width: 100%;
                 background: #fbf6fa;
                 border: 1px solid #f0e4eb;
                 border-radius: 8px;
                 padding: 6px 8px;
-                font-size: 12px;
+                font-size: 13px;
+                line-height: 1.25;
+                min-height: 34px;
+                margin-bottom: 6px;
+            }}
+
+            .mini-item:last-child {{
+                margin-bottom: 0;
+            }}
+
+            .mini-item span {{
+                display: table-cell;
+                width: 82%;
+                vertical-align: middle;
+                line-height: 1.2;
+                overflow-wrap: anywhere;
+            }}
+
+            .mini-item b {{
+                display: table-cell;
+                width: 18%;
+                vertical-align: middle;
+                text-align: right;
             }}
 
             .med-estado {{
@@ -562,8 +640,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
             }}
 
             .med-grid {{
-                display: grid;
-                gap: 8px;
+                display: block;
             }}
 
             .med-card {{
@@ -571,6 +648,11 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 border: 1px solid #f0e4eb;
                 border-radius: 10px;
                 padding: 8px;
+                margin-bottom: 8px;
+            }}
+
+            .med-card:last-child {{
+                margin-bottom: 0;
             }}
 
             .med-name {{
@@ -618,94 +700,126 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 }}
 
                 .header {{
-                    gap: 12px;
+                    display: table;
+                    width: 100%;
                     margin-bottom: 10px;
                     padding: 10px 12px;
                     border-radius: 10px;
                 }}
 
+                .header-main {{
+                    width: 74%;
+                    padding-right: 10px;
+                }}
+
+                .header-logo {{
+                    width: 26%;
+                }}
+
                 .brand-logo,
                 .brand-fallback {{
-                    width: 96px;
-                    height: 96px;
+                    width: 88px;
+                    height: 88px;
+                    line-height: 88px;
                 }}
 
                 .title {{
-                    font-size: 22px;
+                    font-size: 24px;
                     margin-bottom: 2px;
                 }}
 
                 .subtitle {{
-                    font-size: 11px;
+                    font-size: 12px;
                     margin-bottom: 2px;
                 }}
 
                 .meta {{
-                    font-size: 10px;
+                    font-size: 11px;
                 }}
 
                 .section {{
-                    margin-top: 8px;
-                    padding: 10px;
+                    margin-top: 10px;
+                    padding: 12px;
                     border-radius: 10px;
+                }}
+
+                .section.keep-together {{
                     break-inside: avoid;
                     page-break-inside: avoid;
                 }}
 
                 .section-title {{
-                    font-size: 11px;
+                    font-size: 12px;
                     margin-bottom: 6px;
-                }}
-
-                .grid {{
-                    gap: 6px 8px;
+                    break-after: avoid;
+                    page-break-after: avoid;
                 }}
 
                 .card {{
-                    padding: 6px 8px;
+                    width: 49%;
+                    margin: 0 2% 8px 0;
+                    padding: 8px 9px;
                     border-radius: 8px;
                     break-inside: avoid;
                     page-break-inside: avoid;
+                    min-height: 52px;
+                }}
+
+                .card:nth-child(2n) {{
+                    margin-right: 0;
+                }}
+
+                .card.span-2 {{
+                    width: 100%;
+                    margin-right: 0;
                 }}
 
                 .label {{
-                    font-size: 9px;
+                    font-size: 10px;
                 }}
 
                 .value {{
-                    font-size: 15px;
+                    font-size: 13px;
+                    margin-top: 2px;
+                }}
+
+                .score-value {{
+                    font-size: 22px;
                 }}
 
                 .riesgo {{
                     margin-top: 8px;
-                    padding: 8px;
-                    font-size: 13px;
+                    padding: 10px;
+                    font-size: 14px;
                 }}
 
                 .interpretacion {{
-                    padding: 8px;
-                    font-size: 10px;
+                    padding: 10px;
+                    font-size: 12px;
                 }}
 
                 .footer {{
-                    margin-top: 8px;
-                    font-size: 9px;
-                }}
-
-                .group-grid {{
-                    gap: 6px 8px;
+                    margin-top: 10px;
+                    font-size: 10px;
                 }}
 
                 .subgroup {{
-                    padding: 6px 8px;
+                    width: 49%;
+                    margin: 0 2% 8px 0;
+                    padding: 8px;
                     border-radius: 8px;
                     break-inside: avoid;
                     page-break-inside: avoid;
                 }}
 
+                .subgroup:nth-child(2n) {{
+                    margin-right: 0;
+                }}
+
                 .mini-item {{
-                    padding: 4px 6px;
-                    font-size: 10px;
+                    padding: 5px 6px;
+                    font-size: 12px;
+                    line-height: 1.25;
                 }}
 
                 .med-group {{
@@ -716,14 +830,14 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 }}
 
                 .med-name {{
-                    font-size: 10px;
+                    font-size: 11px;
                 }}
 
                 .med-meta span,
                 .med-alerta,
                 .med-estado,
                 .med-empty {{
-                    font-size: 9px;
+                    font-size: 10px;
                 }}
             }}
         </style>
@@ -733,12 +847,12 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
         <div class="container">
 
             <div class="header">
-                <div>
+                <div class="header-main">
                     <div class="title">Reporte Clínico VitaPrenatal</div>
                     <div class="subtitle">Evaluación de riesgo de preeclampsia con datos reales de la consulta</div>
                     <div class="meta">Fecha de evaluación: {fecha_consulta}</div>
                 </div>
-                <div>
+                <div class="header-logo">
                     {logo_html}
                 </div>
             </div>
@@ -770,7 +884,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                         <div class="label">Estado Civil</div>
                         <div class="value">{estado_civil}</div>
                     </div>
-                    <div class="card">
+                    <div class="card span-2">
                         <div class="label">Tipo de sangre</div>
                         <div class="value">{tipo_sangre}</div>
                     </div>
@@ -820,7 +934,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                         <div class="label">Diabetes</div>
                         <div class="value">{antecedente_diabetes}</div>
                     </div>
-                    <div class="card">
+                    <div class="card span-2">
                         <div class="label">Antecedentes familiares HTA</div>
                         <div class="value">{antecedente_familiar}</div>
                     </div>
@@ -854,6 +968,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                             <div class="mini-item"><span>Cesáreas previas</span><b>{cesareas_previas}</b></div>
                             <div class="mini-item"><span>Embarazos previos</span><b>{embarazos_previos}</b></div>
                             <div class="mini-item"><span>Partos previos</span><b>{partos_previos}</b></div>
+                            <div class="mini-item"><span>Preeclampsia en embarazo previo</span><b>{antecedente_preeclampsia_previa}</b></div>
                         </div>
                     </div>
 
@@ -868,20 +983,20 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 </div>
             </div>
 
-            <div class="section">
+            <div class="section keep-together">
                 <div class="section-title">Resultado</div>
 
-                <div class="card">
+                <div class="card score-card">
                     <div class="label">Score</div>
-                    <div class="value">{score}</div>
+                    <div class="value score-value">{_formatear_numero(score)}</div>
                 </div>
 
                 <div class="riesgo" style="background:{color_riesgo}">
-                    {riesgo}
+                    {riesgo_label}
                 </div>
             </div>
 
-            <div class="section">
+            <div class="section keep-together">
                 <div class="section-title">Interpretación Clínica</div>
                 <div class="interpretacion">{interpretacion_segura}</div>
             </div>

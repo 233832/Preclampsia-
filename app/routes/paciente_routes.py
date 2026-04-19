@@ -21,6 +21,7 @@ PACIENTE_CREATE_DOCS_EXAMPLE = {
     "cesarea_previos": 0,
     "embarazos_previos": 0,
     "partos_previos": 0,
+    "antecedente_preeclampsia_embarazo_previo": False,
     "hipertension_previa": False,
     "diabetes": False,
     "antecedentes_familia_hipertension": False,
@@ -81,6 +82,8 @@ def update_paciente(paciente_id: int, paciente_data: PacienteCreate, db: Session
             detail="Paciente no encontrado"
         )
     update_data = paciente_data.model_dump(exclude_unset=True)
+    # Este antecedente se captura solo en alta de paciente y no se modifica despues.
+    update_data.pop("antecedente_preeclampsia_embarazo_previo", None)
     for key, value in update_data.items():
         setattr(paciente, key, value)
     db.commit()

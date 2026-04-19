@@ -45,13 +45,11 @@ def asegurar_campos_obstetricos_enteros() -> None:
 
     try:
         if engine.dialect.name != "mysql":
-            print("[DB] Migracion omitida: solo aplica para MySQL.")
             return
 
         with engine.begin() as conn:
             schema = conn.execute(text("SELECT DATABASE()")).scalar()
             if not schema:
-                print("[DB] Migracion omitida: no se detecto schema activo.")
                 return
 
             placeholders = ", ".join([f":col_{i}" for i in range(len(campos_objetivo))])
@@ -98,13 +96,11 @@ def asegurar_campos_obstetricos_enteros() -> None:
 def asegurar_columna_tipo_sangre() -> None:
     try:
         if engine.dialect.name != "mysql":
-            print("[DB] Migracion tipo_sangre omitida: solo aplica para MySQL.")
             return
 
         with engine.begin() as conn:
             schema = conn.execute(text("SELECT DATABASE()")).scalar()
             if not schema:
-                print("[DB] Migracion tipo_sangre omitida: no se detecto schema activo.")
                 return
 
             columna = conn.execute(
@@ -122,7 +118,6 @@ def asegurar_columna_tipo_sangre() -> None:
 
             if not columna:
                 conn.execute(text("ALTER TABLE pacientes ADD COLUMN tipo_sangre VARCHAR(5) NULL"))
-                print("[DB] Columna tipo_sangre agregada en pacientes.")
                 return
 
             data_type = str(columna.get("DATA_TYPE") or "").lower()
@@ -131,17 +126,67 @@ def asegurar_columna_tipo_sangre() -> None:
 
             if data_type != "varchar" or max_length < 5 or not is_nullable:
                 conn.execute(text("ALTER TABLE pacientes MODIFY COLUMN tipo_sangre VARCHAR(5) NULL"))
-                print("[DB] Columna tipo_sangre ajustada en pacientes.")
-            else:
-                print("[DB] Columna tipo_sangre verificada.")
     except Exception as exc:
         print(f"[DB] Error aplicando migracion de tipo_sangre: {exc}")
+
+
+def asegurar_columna_antecedente_preeclampsia() -> None:
+    try:
+        if engine.dialect.name != "mysql":
+            return
+
+        with engine.begin() as conn:
+            schema = conn.execute(text("SELECT DATABASE()")).scalar()
+            if not schema:
+                return
+
+            columna = conn.execute(
+                text(
+                    """
+                    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = :schema
+                      AND TABLE_NAME = 'pacientes'
+                      AND COLUMN_NAME = 'antecedente_preeclampsia_embarazo_previo'
+                    """
+                ),
+                {"schema": schema},
+            ).mappings().first()
+
+            if not columna:
+                conn.execute(
+                    text(
+                        """
+                        ALTER TABLE pacientes
+                        ADD COLUMN antecedente_preeclampsia_embarazo_previo BOOLEAN NOT NULL DEFAULT 0
+                        """
+                    )
+                )
+                return
+
+            data_type = str(columna.get("DATA_TYPE") or "").lower()
+            is_nullable = str(columna.get("IS_NULLABLE") or "").upper() == "YES"
+            default_value = columna.get("COLUMN_DEFAULT")
+            default_is_zero = str(default_value) == "0"
+
+            if data_type not in {"tinyint", "bool", "boolean"} or is_nullable or not default_is_zero:
+                conn.execute(
+                    text(
+                        """
+                        ALTER TABLE pacientes
+                        MODIFY COLUMN antecedente_preeclampsia_embarazo_previo BOOLEAN NOT NULL DEFAULT 0
+                        """
+                    )
+                )
+    except Exception as exc:
+        print(f"[DB] Error aplicando migracion de antecedente_preeclampsia: {exc}")
 
 
 @app.on_event("startup")
 def startup_ml_load() -> None:
     asegurar_campos_obstetricos_enteros()
     asegurar_columna_tipo_sangre()
+    asegurar_columna_antecedente_preeclampsia()
     ml_loaded = cargar_modelo_ml_seguro()
     if ml_loaded:
         print("[ML] Modelo cargado correctamente al iniciar.")

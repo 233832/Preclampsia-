@@ -27,6 +27,7 @@ class Paciente(Base):
     partos_previos = Column(Integer, default=0)
     abortos_previos = Column(Integer, default=0)
     cesarea_previos = Column(Integer, default=0)
+    antecedente_preeclampsia_embarazo_previo = Column(Boolean, default=False)
     
 # Antecedentes personales patológicos
     enf_renal_cronica = Column(Boolean, default=False)
