@@ -58,8 +58,12 @@ def create_paciente(
     return new_paciente
 
 @paciente_router.get("/", response_model=list[PacienteResponse])
-def read_pacientes(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    pacientes = db.query(Paciente).offset(skip).limit(limit).all()
+def read_pacientes(skip: int = 0, limit: int | None = None, db: Session = Depends(get_db)):
+    query = db.query(Paciente).offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
+
+    pacientes = query.all()
     return pacientes
 
 @paciente_router.get("/{paciente_id}", response_model=PacienteResponse)
