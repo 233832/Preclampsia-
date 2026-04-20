@@ -3,9 +3,8 @@ from sqlalchemy.orm import Session
 from app.shared.config.database import SessionLocal
 from app.models.Configuraciones import Configuracion
 from app.schemas.configuraciones_schema import ConfiguracionBase, ConfiguracionResponse
-from app.services.auth_service import get_current_user
 
-router = APIRouter(prefix="/configuraciones", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/configuraciones")
 
 def serialize_configuracion(config: Configuracion) -> dict:
     return {

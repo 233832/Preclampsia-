@@ -1,15 +1,13 @@
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from app.services.auth_service import get_current_user
 from app.shared.config.database import get_db
 from app.models.ExpedienteClinico import ExpedienteClinico
 from app.models.Paciente import Paciente
 from app.schemas.expediente_schema import ExpedienteClinicoCreate, ExpedienteClinicoResponse
-from app.services.auth_service import get_current_user
 
 
-expediente_router = APIRouter(dependencies=[Depends(get_current_user)])
+expediente_router = APIRouter()
 
 
 @expediente_router.post("/expedientes/", response_model=ExpedienteClinicoResponse, status_code=status.HTTP_201_CREATED)

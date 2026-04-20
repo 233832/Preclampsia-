@@ -16,9 +16,8 @@ from fastapi.responses import FileResponse
 import base64
 import os
 import unicodedata
-from app.services.auth_service import get_current_user
 
-consulta_router = APIRouter(dependencies=[Depends(get_current_user)])
+consulta_router = APIRouter()
 
 
 def _bool_a_int(valor: bool) -> int:
@@ -279,9 +278,6 @@ def create_consulta(consulta: ConsultaCreate, db: Session = Depends(get_db)):
     )
 
     return new_consulta
-
-from app.services.auth_service import get_current_user
-
 @consulta_router.get("/consultas/", response_model=list[ConsultaResponse])
 def read_consultas(
     skip: int = 0,

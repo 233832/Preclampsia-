@@ -5,9 +5,8 @@ from app.models.Paciente import Paciente
 from app.schemas.paciente_schema import PacienteCreate, PacienteResponse
 from app.services.notificacion_service import crear_notificacion
 from app.models.Notificaciones import TipoNotificacionEnum
-from app.services.auth_service import get_current_user
 
-paciente_router = APIRouter(prefix="/pacientes", dependencies=[Depends(get_current_user)])
+paciente_router = APIRouter(prefix="/pacientes")
 
 PACIENTE_CREATE_DOCS_EXAMPLE = {
     "nombre": "string",

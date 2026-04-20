@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from app.services.auth_service import get_current_user
 from app.shared.config.database import SessionLocal
 from app.models.Consultas import Consulta
 from app.models.Configuraciones import Configuracion
 from app.models.Notificaciones import Notificacion, TipoNotificacionEnum
 
 
-router = APIRouter(prefix="/actualizar", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/actualizar")
 
 
 def get_db():

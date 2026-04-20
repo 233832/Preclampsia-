@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends
 import unicodedata
-from app.services.auth_service import get_current_user
 from app.services.medicacion_service import obtener_medicacion_por_riesgo
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter()
 
 
 def normalizar_riesgo(riesgo: str) -> str:

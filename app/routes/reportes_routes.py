@@ -8,9 +8,8 @@ from app.models.Consultas import Consulta
 from app.models.Paciente import Paciente
 from app.utils.generar_pdf import generar_html_reporte, generar_pdf
 from app.routes.consulta_routes import prediccion_consulta
-from app.services.auth_service import get_current_user
 
-router = APIRouter(prefix="/reportes", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/reportes")
 
 RUTA_REPORTES = "reportes"
 

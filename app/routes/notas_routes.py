@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.services.auth_service import get_current_user
 from app.shared.config.database import SessionLocal
 
 from app.models.NotasPaciente import NotaPaciente
@@ -8,9 +7,8 @@ from app.models.Consultas import Consulta
 from app.models.Paciente import Paciente
 
 from app.schemas.notas_schema import NotaCreate, NotaResponse, NotaUpdate
-from app.services.auth_service import get_current_user
 
-router = APIRouter(prefix="/notas", dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/notas")
 
 # conexión DB
 def get_db():
