@@ -1,5 +1,5 @@
 from app.shared.config.database import Base
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy.orm import relationship
 
 
@@ -42,4 +42,5 @@ class Paciente(Base):
     # Relaciones
     consultas = relationship("Consulta", back_populates="paciente", cascade="all, delete-orphan")
     expediente = relationship("ExpedienteClinico", back_populates="paciente", uselist=False, cascade="all, delete-orphan")
-    notificaciones = relationship("Notificacion", back_populates="paciente")
+    notas = relationship("NotaPaciente", back_populates="paciente", cascade="all, delete")
+    notificaciones = relationship("Notificacion", back_populates="paciente", cascade="all, delete-orphan")

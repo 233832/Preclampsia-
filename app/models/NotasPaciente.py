@@ -8,12 +8,12 @@ class NotaPaciente(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    consulta_id = Column(Integer, ForeignKey("consultas.id"), nullable=False)
-    paciente_id = Column(Integer, ForeignKey("pacientes.id"), nullable=False)
+    consulta_id = Column(Integer, ForeignKey("consultas.id", ondelete="CASCADE"), nullable=False)
+    paciente_id = Column(Integer, ForeignKey("pacientes.id", ondelete="CASCADE"), nullable=False)
 
     contenido = Column(Text, nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
 
     # relaciones
     consulta = relationship("Consulta", back_populates="notas")
-    paciente = relationship("Paciente")
+    paciente = relationship("Paciente", back_populates="notas")
