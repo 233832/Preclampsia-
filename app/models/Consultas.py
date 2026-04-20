@@ -44,12 +44,12 @@ class Consulta(Base):
     # Relaciones
     paciente = relationship("Paciente", back_populates="consultas")
     expediente = relationship("ExpedienteClinico", back_populates="consultas")
-    notificaciones = relationship("Notificacion", back_populates="consulta")
+    notificaciones = relationship("Notificacion", back_populates="consulta", cascade="all, delete")
     
     # Resultados de IA
     interpretacion = Column(Text, nullable=True)
     score_total = Column(Float, nullable=True)
     
     # Relación con notas de paciente
-    notas = relationship("NotaPaciente", back_populates="consulta", cascade="all, delete")
+    notas = relationship("NotaPaciente", back_populates="consulta", cascade="all, delete-orphan")
     

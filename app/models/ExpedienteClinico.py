@@ -15,7 +15,11 @@ class ExpedienteClinico(Base):
 
     # Relaciones
     paciente = relationship("Paciente", back_populates="expediente")
-    consultas = relationship("Consulta", back_populates="expediente")
+    consultas = relationship(
+        "Consulta",
+        back_populates="expediente",
+        cascade="all, delete-orphan",
+    )
 
 
     #class Recipie(Base):
