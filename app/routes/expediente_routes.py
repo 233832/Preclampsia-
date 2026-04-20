@@ -33,12 +33,8 @@ def create_expediente(expediente: ExpedienteClinicoCreate, db: Session = Depends
         raise HTTPException(status_code=409, detail="Paciente already has an expediente")
 
 @expediente_router.get("/expedientes/", response_model=list[ExpedienteClinicoResponse])
-def read_expedientes(skip: int = 0, limit: int | None = None, db: Session = Depends(get_db)):
-    query = db.query(ExpedienteClinico).offset(skip)
-    if limit is not None:
-        query = query.limit(limit)
-
-    return query.all()
+def read_expedientes(skip: int = 0, db: Session = Depends(get_db)):
+    return db.query(ExpedienteClinico).offset(skip).all()
 
 @expediente_router.get("/expedientes/{expediente_id}", response_model=ExpedienteClinicoResponse)
 def read_expediente(expediente_id: int, db: Session = Depends(get_db)):

@@ -281,14 +281,9 @@ def create_consulta(consulta: ConsultaCreate, db: Session = Depends(get_db)):
 @consulta_router.get("/consultas/", response_model=list[ConsultaResponse])
 def read_consultas(
     skip: int = 0,
-    limit: int | None = None,
     db: Session = Depends(get_db),  # 🔐 seguridad
 ):
-    query = db.query(Consulta).offset(skip)
-    if limit is not None:
-        query = query.limit(limit)
-
-    consultas = query.all()
+    consultas = db.query(Consulta).offset(skip).all()
     
     for consulta in consultas:
         paciente = db.query(Paciente).filter(Paciente.id == consulta.paciente_id).first()
