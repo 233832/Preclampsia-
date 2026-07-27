@@ -4,7 +4,7 @@ from app.shared.config.database import get_db
 from app.models.Consultas import Consulta, RiesgoEnum
 from app.models.Paciente import Paciente
 from app.models.ExpedienteClinico import ExpedienteClinico
-from app.schemas.consulta_schema import ConsultaCreate, ConsultaResponse
+from app.schemas.consulta_schema import ConsultaCreate, ConsultaResponse, ConsultaMedicacionUpdate
 from app.services.gemini_service import (
     generar_prediccion_gemini,
     clasificar_riesgo,
@@ -338,6 +338,30 @@ def update_consulta(consulta_id: int, consulta_data: ConsultaCreate, db: Session
     db.refresh(consulta)
 
     _adjuntar_resultados_a_consulta(consulta, resultados)
+    return consulta
+
+
+@consulta_router.put("/consultas/{consulta_id}/medicacion-doctor", response_model=ConsultaResponse)
+def update_medicacion_doctor(
+    consulta_id: int,
+    payload: ConsultaMedicacionUpdate,
+    db: Session = Depends(get_db),
+):
+    consulta = db.query(Consulta).filter(Consulta.id == consulta_id).first()
+    if not consulta:
+        raise HTTPException(status_code=404, detail="Consulta not found")
+
+    if payload.recomendacion_doctor is not None:
+        consulta.recomendacion_doctor = payload.recomendacion_doctor.strip() or None
+
+    if payload.incluir_medicacion_sugerida is not None:
+        consulta.incluir_medicacion_sugerida = payload.incluir_medicacion_sugerida
+
+    if payload.incluir_recomendacion_doctor is not None:
+        consulta.incluir_recomendacion_doctor = payload.incluir_recomendacion_doctor
+
+    db.commit()
+    db.refresh(consulta)
     return consulta
 
 @consulta_router.delete("/consultas/{consulta_id}", status_code=status.HTTP_204_NO_CONTENT)

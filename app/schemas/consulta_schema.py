@@ -20,6 +20,9 @@ class ConsultaBase(BaseModel):
     presion_sistolica: int
     presion_diastolica: int
     pam: float
+    recomendacion_doctor: str | None = None
+    incluir_medicacion_sugerida: bool = True
+    incluir_recomendacion_doctor: bool = True
     model_config = ConfigDict(from_attributes=True)
 
 class ConsultaCreate(ConsultaBase):
@@ -33,3 +36,11 @@ class ConsultaResponse(ConsultaBase):
     riesgo_ml_modelo: str | None = None
     confianza_ml: float | None = None
     interpretacion: str | None = None
+
+
+class ConsultaMedicacionUpdate(BaseModel):
+    recomendacion_doctor: str | None = None
+    incluir_medicacion_sugerida: bool | None = None
+    incluir_recomendacion_doctor: bool | None = None
+
+    model_config = ConfigDict(from_attributes=True)

@@ -22,6 +22,27 @@ def obtener_ruta_pdf(consulta_id: int):
     return os.path.join(RUTA_REPORTES, f"reporte_{consulta_id}.pdf")
 
 
+def _normalizar_riesgo_reporte(valor_riesgo) -> str:
+    if not valor_riesgo:
+        return "NINGUNO"
+
+    if hasattr(valor_riesgo, "name"):
+        return str(valor_riesgo.name).upper()
+
+    texto = str(valor_riesgo).strip().upper()
+    if texto.startswith("RIESGOENUM."):
+        texto = texto.split(".", 1)[1]
+
+    equivalencias = {
+        "NINGUNO": "NINGUNO",
+        "MEDIO": "MEDIO",
+        "ALTO": "ALTO",
+        "HOSPITALIZACION": "HOSPITALIZACION",
+    }
+
+    return equivalencias.get(texto, "NINGUNO")
+
+
 def _obtener_contexto_reporte(consulta_id: int, db: Session):
     consulta = db.query(Consulta).filter(Consulta.id == consulta_id).first()
     if not consulta:
@@ -39,7 +60,7 @@ def _obtener_contexto_reporte(consulta_id: int, db: Session):
             consulta.interpretacion = "No se pudo generar interpretación automática."
             consulta.score_total = 0
 
-    riesgo = consulta.riesgo.name if consulta.riesgo else "NINGUNO"
+    riesgo = _normalizar_riesgo_reporte(consulta.riesgo)
     score = consulta.score_total if consulta.score_total is not None else 0
     interpretacion = consulta.interpretacion or "Sin interpretación disponible"
 
@@ -91,7 +112,8 @@ def obtener_reporte(consulta_id: int):
         return FileResponse(
             ruta_pdf,
             media_type="application/pdf",
-            filename=f"reporte_{consulta_id}.pdf"
+            filename=f"reporte_{consulta_id}.pdf",
+            content_disposition_type="inline",
         )
     finally:
         db.close()

@@ -1,5 +1,5 @@
 from app.shared.config.database import Base
-from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Enum, Text
+from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Enum, Text, Boolean
 from sqlalchemy.orm import relationship
 import enum
 
@@ -49,6 +49,11 @@ class Consulta(Base):
     # Resultados de IA
     interpretacion = Column(Text, nullable=True)
     score_total = Column(Float, nullable=True)
+
+    # Recomendacion del doctor y control de visibilidad en PDF
+    recomendacion_doctor = Column(Text, nullable=True)
+    incluir_medicacion_sugerida = Column(Boolean, default=True, nullable=False)
+    incluir_recomendacion_doctor = Column(Boolean, default=True, nullable=False)
     
     # Relación con notas de paciente
     notas = relationship("NotaPaciente", back_populates="consulta", cascade="all, delete-orphan")

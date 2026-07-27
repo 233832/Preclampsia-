@@ -182,11 +182,82 @@ def asegurar_columna_antecedente_preeclampsia() -> None:
         print(f"[DB] Error aplicando migracion de antecedente_preeclampsia: {exc}")
 
 
+def asegurar_columnas_medicacion_consulta() -> None:
+    try:
+        if engine.dialect.name != "mysql":
+            return
+
+        with engine.begin() as conn:
+            schema = conn.execute(text("SELECT DATABASE()")).scalar()
+            if not schema:
+                return
+
+            columnas = conn.execute(
+                text(
+                    """
+                    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+                    FROM information_schema.COLUMNS
+                    WHERE TABLE_SCHEMA = :schema
+                      AND TABLE_NAME = 'consultas'
+                      AND COLUMN_NAME IN (
+                          'recomendacion_doctor',
+                          'incluir_medicacion_sugerida',
+                          'incluir_recomendacion_doctor'
+                      )
+                    """
+                ),
+                {"schema": schema},
+            ).mappings().all()
+
+            info_por_columna = {row["COLUMN_NAME"]: row for row in columnas}
+
+            if "recomendacion_doctor" not in info_por_columna:
+                conn.execute(
+                    text(
+                        """
+                        ALTER TABLE consultas
+                        ADD COLUMN recomendacion_doctor TEXT NULL
+                        """
+                    )
+                )
+
+            for columna in ("incluir_medicacion_sugerida", "incluir_recomendacion_doctor"):
+                info = info_por_columna.get(columna)
+                if not info:
+                    conn.execute(
+                        text(
+                            f"""
+                            ALTER TABLE consultas
+                            ADD COLUMN {columna} BOOLEAN NOT NULL DEFAULT 1
+                            """
+                        )
+                    )
+                    continue
+
+                data_type = str(info.get("DATA_TYPE") or "").lower()
+                is_nullable = str(info.get("IS_NULLABLE") or "").upper() == "YES"
+                default_value = info.get("COLUMN_DEFAULT")
+                default_is_one = str(default_value) == "1"
+
+                if data_type not in {"tinyint", "bool", "boolean"} or is_nullable or not default_is_one:
+                    conn.execute(
+                        text(
+                            f"""
+                            ALTER TABLE consultas
+                            MODIFY COLUMN {columna} BOOLEAN NOT NULL DEFAULT 1
+                            """
+                        )
+                    )
+    except Exception as exc:
+        print(f"[DB] Error aplicando migracion de medicacion en consultas: {exc}")
+
+
 @app.on_event("startup")
 def startup_ml_load() -> None:
     asegurar_campos_obstetricos_enteros()
     asegurar_columna_tipo_sangre()
     asegurar_columna_antecedente_preeclampsia()
+    asegurar_columnas_medicacion_consulta()
     ml_loaded = cargar_modelo_ml_seguro()
     if ml_loaded:
         print("[ML] Modelo cargado correctamente al iniciar.")

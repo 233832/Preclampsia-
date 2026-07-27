@@ -98,6 +98,20 @@ def _obtener_medicacion_recomendada(riesgo) -> dict:
     return data
 
 
+def _lineas_texto_para_pdf(texto: str) -> list[str]:
+    texto_limpio = str(texto or "").strip()
+    if not texto_limpio:
+        return []
+
+    lineas = []
+    for linea in texto_limpio.splitlines():
+        contenido = linea.strip()
+        if contenido:
+            lineas.append(contenido)
+
+    return lineas or [texto_limpio]
+
+
 def _resumen_medicacion_para_pdf(medicacion_data: dict) -> list[str]:
     lineas: list[str] = []
     estado = str(medicacion_data.get("estado") or "Sin recomendación")
@@ -205,6 +219,54 @@ def _render_medicacion_html(medicacion_data: dict) -> str:
     return f'<div class="med-estado">Estado: {estado}</div>{"".join(grupos_html)}'
 
 
+def _render_recomendacion_doctor_html(consulta) -> str:
+    incluir_sugerida = bool(getattr(consulta, "incluir_medicacion_sugerida", True))
+    incluir_doctor = bool(getattr(consulta, "incluir_recomendacion_doctor", True))
+    texto_doctor = str(getattr(consulta, "recomendacion_doctor", None) or "").strip()
+
+    bloques = []
+
+    if incluir_sugerida:
+        riesgo_consulta = getattr(consulta, "riesgo", None)
+        medicacion_sugerida = _obtener_medicacion_recomendada(riesgo_consulta)
+        bloques.append(
+            """
+            <div class="med-group">
+                <div class="med-group-title">Medicaci\u00f3n sugerida por el sistema</div>
+                {contenido}
+            </div>
+            """.format(
+                contenido=_render_medicacion_html(medicacion_sugerida),
+            )
+        )
+
+    if incluir_doctor:
+        if texto_doctor:
+            texto_seguro = html.escape(texto_doctor).replace("\n", "<br/>")
+            bloques.append(
+                f'''
+                <div class="med-group">
+                    <div class="med-group-title">Medicaci\u00f3n recetada por el doctor</div>
+                    <div class="doctor-note">{texto_seguro}</div>
+                </div>
+                '''
+            )
+        else:
+            bloques.append(
+                """
+                <div class="med-group">
+                    <div class="med-group-title">Medicaci\u00f3n recetada por el doctor</div>
+                    <div class="med-empty">Sin recomendaci\u00f3n escrita por el doctor.</div>
+                </div>
+                """
+            )
+
+    if not bloques:
+        return '<div class="med-empty">No hay medicaci\u00f3n seleccionada para mostrar en el PDF.</div>'
+
+    return "".join(bloques)
+
+
 def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score, interpretacion):
     doc = SimpleDocTemplate(ruta_pdf)
     styles = getSampleStyleSheet()
@@ -213,8 +275,13 @@ def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score,
     fecha_consulta = _formatear_fecha(getattr(consulta, "fecha_hora_consulta", None))
     pam = _obtener_pam_consulta(consulta)
     tipo_sangre = str(getattr(paciente, "tipo_sangre", None) or "No especificado")
+    incluir_sugerida = bool(getattr(consulta, "incluir_medicacion_sugerida", True))
+    incluir_doctor = bool(getattr(consulta, "incluir_recomendacion_doctor", True))
+    texto_doctor = str(getattr(consulta, "recomendacion_doctor", None) or "").strip()
+
     medicacion_data = _obtener_medicacion_recomendada(riesgo)
-    lineas_medicacion = _resumen_medicacion_para_pdf(medicacion_data)
+    lineas_medicacion = _resumen_medicacion_para_pdf(medicacion_data) if incluir_sugerida else []
+    lineas_doctor = _lineas_texto_para_pdf(texto_doctor) if incluir_doctor else []
 
     contenido = []
 
@@ -277,8 +344,19 @@ def _generar_pdf_reportlab_fallback(consulta, paciente, ruta_pdf, riesgo, score,
         Paragraph("Medicación recomendada", styles["Heading3"]),
     ])
 
-    for linea in lineas_medicacion:
-        contenido.append(Paragraph(html.escape(str(linea)), styles["Normal"]))
+    if incluir_sugerida:
+        contenido.append(Paragraph("Sugerida por el sistema", styles["Heading4"]))
+        for linea in lineas_medicacion:
+            contenido.append(Paragraph(html.escape(str(linea)), styles["Normal"]))
+
+    if incluir_doctor:
+        contenido.append(Spacer(1, 8))
+        contenido.append(Paragraph("Recetada por el doctor", styles["Heading4"]))
+        if lineas_doctor:
+            for linea in lineas_doctor:
+                contenido.append(Paragraph(html.escape(str(linea)), styles["Normal"]))
+        else:
+            contenido.append(Paragraph("Sin recomendación escrita por el doctor.", styles["Normal"]))
 
     doc.build(contenido)
 
@@ -345,8 +423,7 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
     embarazos_previos = html.escape(str(getattr(paciente, "embarazos_previos", 0) or 0))
     partos_previos = html.escape(str(getattr(paciente, "partos_previos", 0) or 0))
 
-    medicacion_data = _obtener_medicacion_recomendada(riesgo_label)
-    medicacion_html = _render_medicacion_html(medicacion_data)
+    medicacion_html = _render_recomendacion_doctor_html(consulta)
 
     logo_html = (
         f'<img class="brand-logo" src="{logo_data_url}" alt="Logo VitaPrenatal" />'
@@ -684,6 +761,16 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 font-size: 12px;
             }}
 
+            .doctor-note {{
+                background: #fff;
+                border: 1px solid #f0e4eb;
+                border-radius: 10px;
+                padding: 10px;
+                font-size: 12px;
+                line-height: 1.5;
+                white-space: pre-line;
+            }}
+
             @media print {{
                 body {{
                     padding: 0;
@@ -838,6 +925,11 @@ def generar_html_reporte(consulta, paciente, riesgo, score, interpretacion) -> s
                 .med-estado,
                 .med-empty {{
                     font-size: 10px;
+                }}
+
+                .doctor-note {{
+                    font-size: 10px;
+                    padding: 8px;
                 }}
             }}
         </style>
