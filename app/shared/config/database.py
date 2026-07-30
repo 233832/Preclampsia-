@@ -1,8 +1,9 @@
+import os
+import socket
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -14,33 +15,69 @@ db_config = {
     "DB_NAME": os.getenv("DB_NAME"),
 }
 
-required_db_vars = ("DB_USER", "DB_HOST", "DB_PORT", "DB_NAME")
-missing_db_vars = [key for key in required_db_vars if not db_config.get(key)]
-if missing_db_vars:
-    missing_vars_text = ", ".join(missing_db_vars)
-    raise RuntimeError(
-        f"Faltan variables de entorno de base de datos: {missing_vars_text}"
+
+def _is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+db_engine_choice = os.getenv("DB_ENGINE", "mysql").lower()
+
+if db_engine_choice == "sqlite":
+    SQLALCHEMY_DATABASE_URL = "sqlite:///./preclampsia_dev.db"
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    db_password = db_config.get("DB_PASSWORD") or ""
+    db_user = db_config.get("DB_USER") or "root"
+    db_host = db_config.get("DB_HOST") or "localhost"
+    db_port_str = db_config.get("DB_PORT") or "3306"
+    try:
+        db_port = int(db_port_str)
+    except ValueError:
+        db_port = 3306
+    db_name = db_config.get("DB_NAME") or "prelampsia_db"
+
+    SQLALCHEMY_DATABASE_URL = (
+        f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     )
 
-db_password = db_config["DB_PASSWORD"] or ""
-
-SQLALCHEMY_DATABASE_URL = (
-    f"mysql+pymysql://{db_config['DB_USER']}:{db_password}"
-    f"@{db_config['DB_HOST']}:{db_config['DB_PORT']}/{db_config['DB_NAME']}"
-)
-
-# Evita conexiones muertas en el pool (causa comun de InterfaceError en rollback).
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),
-    pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
-    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
-    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
-)
+    if _is_port_open(db_host, db_port, timeout=0.8):
+        try:
+            mysql_engine = create_engine(
+                SQLALCHEMY_DATABASE_URL,
+                pool_pre_ping=True,
+                connect_args={"connect_timeout": 2},
+                pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),
+                pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+                pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+                max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
+            )
+            with mysql_engine.connect() as conn:
+                pass
+            engine = mysql_engine
+        except Exception as e:
+            print(f"[DB WARNING] Error al conectar a MySQL ({e}). Usando SQLite dev database.")
+            SQLALCHEMY_DATABASE_URL = "sqlite:///./preclampsia_dev.db"
+            engine = create_engine(
+                SQLALCHEMY_DATABASE_URL,
+                connect_args={"check_same_thread": False}
+            )
+    else:
+        print(f"[DB WARNING] Puerto MySQL ({db_host}:{db_port}) cerrado o no responde. Usando SQLite dev database.")
+        SQLALCHEMY_DATABASE_URL = "sqlite:///./preclampsia_dev.db"
+        engine = create_engine(
+            SQLALCHEMY_DATABASE_URL,
+            connect_args={"check_same_thread": False}
+        )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base() 
+Base = declarative_base()
 
 
 def get_db():
@@ -49,3 +86,4 @@ def get_db():
         yield db
     finally:
         db.close()
+
